@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env*
+!.env.example
+.claude
+.vscode
+*.md
+*.log
+coverage
+tsconfig.tsbuildinfo

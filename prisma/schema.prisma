@@ -1,0 +1,422 @@
+// Prisma schema for the Wangeci book/publishing platform.
+//
+// Layout:
+//   1. Better Auth's required tables (User, Session, Account, Verification)
+//   2. Catalog (Work, Edition, Asset, BookPreview)
+//   3. Commerce (Cart, CartItem, Order, OrderItem, Entitlement)
+//   4. Reader state (ReadingPosition, UserPreferences)
+//   5. Notifications (NotificationLog)
+//
+// IDs use cuid() everywhere for consistency. Timestamps use
+// createdAt/updatedAt on every table.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// 1. Better Auth
+// ---------------------------------------------------------------------------
+// Standard Better Auth adapter shape. Field names/types follow Better Auth's
+// own Prisma schema generator so `auth.ts` (owned by a later agent) can be
+// pointed at this schema without adapter overrides.
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions         Session[]
+  accounts         Account[]
+  cart             Cart?
+  orders           Order[]
+  entitlements     Entitlement[]
+  readingPositions ReadingPosition[]
+  preferences      UserPreferences?
+  notificationLogs NotificationLog[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  // The stable provider-side namespace Better Auth uses (with accountId) to
+  // recognize an account — required by the installed better-auth version's
+  // core Account schema (see @better-auth/core/db/schema/account.ts). Not to
+  // be confused with providerId; Better Auth writes a synthetic value here
+  // (e.g. "local:oauth:<providerId>") for providers without their own issuer.
+  issuer                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  // Password hash for email/password sign-in (Better Auth stores this on
+  // the Account row, not on User).
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Better Auth's own account-linking uniqueness guarantee: one row per
+  // (issuer, accountId) pair.
+  @@unique([issuer, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Better Auth's core Verification schema declares identifier as an
+  // indexed field (it's looked up directly by the Prisma adapter).
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// 2. Catalog
+// ---------------------------------------------------------------------------
+
+enum EditionFormat {
+  EPUB
+  AUDIOBOOK
+  PAPERBACK
+}
+
+enum AssetKind {
+  COVER_IMAGE
+  EPUB_FILE
+  AUDIO_FILE
+  PAPERBACK_PROOF
+  OTHER
+}
+
+model Work {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  author      String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  editions Edition[]
+  previews BookPreview[]
+
+  @@map("work")
+}
+
+model Edition {
+  id        String        @id @default(cuid())
+  format    EditionFormat
+  price     Decimal       @db.Decimal(10, 2)
+  currency  String        @default("KES")
+  // Editions are deactivated (not deleted) once orders reference them, so
+  // purchase history keeps a valid foreign key.
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  workId String
+  work   Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  assets           Asset[]
+  previews         BookPreview[]
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  entitlements     Entitlement[]
+  readingPositions ReadingPosition[]
+
+  @@index([workId])
+  @@map("edition")
+}
+
+model Asset {
+  id        String    @id @default(cuid())
+  kind      AssetKind
+  // Which R2 bucket the object lives in — env.R2_BUCKET_PUBLIC or
+  // env.R2_BUCKET_PROTECTED, not a foreign key, just a bucket name.
+  bucket    String
+  key       String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  editionId String
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@index([editionId])
+  @@map("asset")
+}
+
+model BookPreview {
+  id        String   @id @default(cuid())
+  title     String?
+  bucket    String
+  key       String
+  mimeType  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A preview can be attached to a Work (e.g. a "look inside" spanning all
+  // editions) or to one specific Edition (e.g. an audiobook sample clip).
+  // Application code enforces that at least one of these is set.
+  workId String?
+  work   Work?   @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  editionId String?
+  edition   Edition? @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@index([workId])
+  @@index([editionId])
+  @@map("book_preview")
+}
+
+// ---------------------------------------------------------------------------
+// 3. Commerce
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One active cart per user. The @unique below already creates a btree
+  // index on userId, so no separate @@index is needed.
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items CartItem[]
+
+  @@map("cart")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cartId String
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  editionId String
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  // One line per edition per cart — re-adding the same edition increments
+  // quantity instead of creating a duplicate row. The unique composite
+  // index below already serves cartId-only lookups (leftmost prefix), so
+  // no separate @@index([cartId]) is needed.
+  @@unique([cartId, editionId])
+  @@index([editionId])
+  @@map("cart_item")
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  status            OrderStatus @default(PENDING)
+  totalAmount       Decimal     @db.Decimal(10, 2)
+  currency          String      @default("KES")
+  // Nullable until a Paystack transaction is initiated for this order (an
+  // Order row is created PENDING first, then the reference is attached once
+  // Paystack returns one). @unique on Postgres permits multiple NULLs, so
+  // many not-yet-initiated orders can coexist.
+  paystackReference String?     @unique
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Restrict, not Cascade: an order is a financial record and must outlive
+  // the user row (e.g. for accounting/refunds) even if the account is
+  // later deleted. Account deletion flows must handle this explicitly.
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  items        OrderItem[]
+  entitlements Entitlement[]
+
+  @@index([userId])
+  // Admin dashboards / pending-order sweeps filter by status.
+  @@index([status])
+  @@map("order")
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  quantity  Int      @default(1)
+  // Price at time of purchase — copied from Edition.price so later price
+  // changes never rewrite historical order totals.
+  unitPrice Decimal  @db.Decimal(10, 2)
+  currency  String   @default("KES")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Restrict: never let an edition disappear out from under a paid order.
+  editionId String
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([editionId])
+  @@map("order_item")
+}
+
+model Entitlement {
+  id        String   @id @default(cuid())
+  grantedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  editionId String
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Restrict)
+
+  // The order that granted this entitlement, if any (nullable so an admin
+  // can grant free/comp access without a backing order).
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  // A user only ever needs one entitlement row per edition. This unique
+  // constraint is also the idempotency guard for a retried Paystack webhook
+  // granting entitlements inside a transaction (pair with an upsert on
+  // [userId, editionId] rather than a plain create). It already indexes
+  // userId as the leftmost column, so no separate @@index([userId]).
+  @@unique([userId, editionId])
+  @@index([editionId])
+  @@map("entitlement")
+}
+
+// ---------------------------------------------------------------------------
+// 4. Reader state
+// ---------------------------------------------------------------------------
+
+model ReadingPosition {
+  id          String   @id @default(cuid())
+  // Format-specific position marker: EPUB CFI string, audiobook timestamp
+  // in milliseconds (as a string), or page number — interpretation is up
+  // to the reader client based on Edition.format.
+  locator     String
+  progressPct Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  editionId String
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  // One progress row per user per edition. Already indexes userId as the
+  // leftmost column, so no separate @@index([userId]).
+  @@unique([userId, editionId])
+  @@index([editionId])
+  @@map("reading_position")
+}
+
+model UserPreferences {
+  id                 String   @id @default(cuid())
+  emailNotifications Boolean  @default(true)
+  smsNotifications   Boolean  @default(true)
+  locale             String   @default("en")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// ---------------------------------------------------------------------------
+// 5. Notifications
+// ---------------------------------------------------------------------------
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+}
+
+model NotificationLog {
+  id         String              @id @default(cuid())
+  channel    NotificationChannel
+  status     NotificationStatus  @default(QUEUED)
+  // e.g. "order_confirmation", "otp", "password_reset" — lets senders and
+  // webhook handlers filter/report by notification type.
+  purpose    String
+  // Email address or phone number the notification was sent to.
+  recipient  String
+  // Resend message id / Africa's Talking message id — used to match an
+  // inbound delivery webhook back to this row. Null until the provider
+  // accepts the send (row starts QUEUED with no providerId yet). Unique
+  // rather than a plain index: each provider message id should resolve to
+  // exactly one log row, and a unique index is also the fastest structure
+  // for this webhook's exact-match hot path. Postgres permits multiple
+  // NULLs under @unique, so many not-yet-sent QUEUED rows can coexist.
+  providerId String?             @unique
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  // Nullable: system notifications (e.g. an internal alert) may have no
+  // associated user.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("notification_log")
+}
