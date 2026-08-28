@@ -1,42 +1,59 @@
 "use client";
 
 /**
- * /signup — same `AuthShell` as /login for shell consistency, with the
- * fuller field set from the plan.
+ * /signup — rebuilt to match `/login`'s full-bleed split layout (per an
+ * explicit follow-up request after the initial passwordless build, which
+ * had left `/signup` on the older card-style `AuthShell`). Same pinned
+ * top-left mark, pill Sign In/Sign Up switcher, headline/subtext
+ * treatment, flat-blue primary button, divider, circular Iconify OAuth
+ * row, and right-column `AuthCarousel` as `/login` — just with the fuller
+ * field set this page has always needed (name/country/county/phone).
  *
- * Judgment call: separate First name / Last name fields (joined into a
- * single `name` string client-side before POSTing) rather than one Full
- * Name field, since the mock `/api/auth/signup` route only accepts
- * `name: string`. Two fields preserves the plan's spec and reads as
- * better UX for a first-time signup form; see the final report for the
- * full reasoning.
+ * `AuthShell` (the floating card shell) is no longer used here — it's
+ * left in place unmodified for any future auth page that still wants the
+ * card treatment (e.g. `/verify`, `/reset-password`).
  *
- * Country/County are optional (the API's `country` field is optional too)
- * — only email, password, and password confirmation are required. Phone
- * is optional, but if a local number is entered it must carry a country
- * code; `PhoneInput`'s own structure (a dial-code select paired with the
- * number field) makes a code-less phone number impossible to construct,
- * this form just guards the case where no code has been selected yet.
+ * Passwordless (plan §2A): no password field anywhere. Submitting sends
+ * the collected email through the same email-OTP flow `/login` uses
+ * (`authClient.emailOtp.sendVerificationOtp`) and opens `TwoFactorModal`,
+ * rather than POSTing a password-based account to the mock
+ * `/api/auth/signup` route.
+ *
+ * Judgment call: separate First name / Last name fields rather than one
+ * Full Name field — reads as better UX for a first-time signup form.
+ * These, plus country/county/phone, aren't sent anywhere yet (there's no
+ * account-creation endpoint left to send them to once password auth is
+ * gone) — they're captured in state and validated as before so the
+ * field-level UX stays intact, ready to be wired into whatever
+ * account-creation call the backend session ends up exposing alongside
+ * the OTP verify.
+ *
+ * `CountrySelect`/`StateSelect`/`PhoneInput` below are the existing
+ * `components/ui` primitives, reused as-is (not restyled to pixel-match
+ * `/login`'s hand-rolled input treatment) — this file doesn't touch
+ * `components/ui/**`, and rebuilding three data-driven form controls from
+ * scratch to shave a few px of border-radius/color difference wasn't
+ * worth the risk. They already share the navy/gold palette, so the
+ * mismatch is minor.
  */
 import { type FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AuthShell } from "@/components/layout";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  Button,
   CountrySelect,
   FormField,
-  Input,
-  OAuthButtonRow,
-  PhoneInput,
   StateSelect,
+  PhoneInput,
   type CountryOption,
   type SelectOption,
 } from "@/components/ui";
-import { apiClient, ApiError } from "@/lib/api/client";
+import { AppIcon } from "@/lib/icons";
+import { authClient } from "@/lib/auth-client";
 import { fetchStatesForCountry } from "@/lib/api/geo";
 import countriesJson from "@/lib/countries.json";
-import type { MockUser } from "@/lib/mock-user";
+import { AuthCarousel } from "@/components/auth/AuthCarousel";
+import { TwoFactorModal } from "@/components/auth/TwoFactorModal";
 
 const COUNTRIES = countriesJson as CountryOption[];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -46,20 +63,6 @@ interface FieldErrors {
   lastName?: string;
   email?: string;
   phone?: string;
-  password?: string;
-  confirmPassword?: string;
-}
-
-interface SignupBody {
-  name: string;
-  email: string;
-  password: string;
-  country?: string;
-  phone?: string;
-}
-
-interface SignupResponse {
-  user: MockUser;
 }
 
 export default function SignupPage() {
@@ -83,28 +86,41 @@ export default function SignupPage() {
   const [phoneCountryTouched, setPhoneCountryTouched] = useState(false);
   const [phone, setPhone] = useState("");
 
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [oauthNotice, setOauthNotice] = useState<string | null>(null);
 
-  // Cascade: fetch counties/states whenever the selected country changes.
-  useEffect(() => {
+  const [sending, setSending] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  // Cascade: reset/re-fetch counties/states whenever the selected country
+  // changes.
+  //
+  // The "reset stateValue/stateOptions and flip the loading flag" part is
+  // deliberately done during render (comparing against a
+  // previous-country snapshot kept in state) rather than as the first
+  // statements of the effect below — this repo's `react-hooks/
+  // set-state-in-effect` lint rule flags unconditional setState calls at
+  // the top of an effect body, and this is React's own documented
+  // pattern for "adjusting state when a prop/derived value changes"
+  // without one. The effect itself is left to do only what effects are
+  // actually for: the async fetch, with its setState calls tucked inside
+  // the `.then()` callback rather than bare in the effect body.
+  const [statesFetchedForCountry, setStatesFetchedForCountry] =
+    useState(countryIso2);
+  if (countryIso2 !== statesFetchedForCountry) {
+    setStatesFetchedForCountry(countryIso2);
     setStateValue("");
-    if (!countryIso2) {
-      setStateOptions([]);
-      setStatesError(null);
-      return;
-    }
+    setStateOptions([]);
+    setStatesError(null);
+    setStatesLoading(Boolean(countryIso2));
+  }
 
+  useEffect(() => {
+    if (!countryIso2) return;
     const country = COUNTRIES.find((c) => c.iso2 === countryIso2);
     if (!country) return;
 
     let cancelled = false;
-    setStatesLoading(true);
-    setStatesError(null);
 
     fetchStatesForCountry(country.name).then((result) => {
       if (cancelled) return;
@@ -123,32 +139,13 @@ export default function SignupPage() {
     };
   }, [countryIso2]);
 
-  // Sync the phone field's dial code to the selected Country, unless the
-  // user has already changed it independently on the phone field itself.
-  useEffect(() => {
-    if (!phoneCountryTouched && countryIso2) {
-      setPhoneCountryIso2(countryIso2);
-    }
-  }, [countryIso2, phoneCountryTouched]);
-
-  const signupMutation = useMutation({
-    mutationFn: (body: SignupBody) =>
-      apiClient.post<SignupResponse>("/auth/signup", body),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["session"] });
-      router.push("/dashboard");
-    },
-    onError: (error) => {
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : "Something went wrong. Please try again.";
-      setFormError(message);
-      // TODO(api): swap for real error reporting (e.g. Sentry) once the
-      // real auth backend replaces the mock route.
-      console.error("[signup] request failed", error);
-    },
-  });
+  // The phone field's dial code mirrors the selected Country until the
+  // user changes it independently on the phone field itself — derived
+  // at render time (no effect/sync-state needed) so there's nothing to
+  // reset when `countryIso2` changes.
+  const effectivePhoneCountryIso2 = phoneCountryTouched
+    ? phoneCountryIso2
+    : countryIso2;
 
   function validate(): FieldErrors {
     const errors: FieldErrors = {};
@@ -161,26 +158,37 @@ export default function SignupPage() {
       errors.email = "Enter a valid email address";
     }
 
-    if (phone.trim() && !phoneCountryIso2) {
+    if (phone.trim() && !effectivePhoneCountryIso2) {
       errors.phone = "Select a country code for your phone number";
-    }
-
-    if (!password) {
-      errors.password = "Password is required";
-    } else if (password.length < 8) {
-      errors.password = "Password must be at least 8 characters";
-    }
-
-    if (!confirmPassword) {
-      errors.confirmPassword = "Confirm your password";
-    } else if (password !== confirmPassword) {
-      errors.confirmPassword = "Passwords do not match";
     }
 
     return errors;
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  // Collected for later — country/state/phone aren't sent anywhere in
+  // this passwordless build (see file header), but derived here so
+  // they're ready once an account-creation call exists to combine with
+  // the OTP verify.
+  function collectedFields() {
+    const countryName = COUNTRIES.find((c) => c.iso2 === countryIso2)?.name;
+    const dialCode = COUNTRIES.find(
+      (c) => c.iso2 === effectivePhoneCountryIso2
+    )?.dialCode;
+    const combinedPhone =
+      phone.trim() && dialCode
+        ? `${dialCode}${phone.trim().replace(/\D/g, "")}`
+        : undefined;
+
+    return {
+      name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      email: email.trim(),
+      country: countryName,
+      state: stateValue || undefined,
+      phone: combinedPhone,
+    };
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
 
@@ -188,200 +196,304 @@ export default function SignupPage() {
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
-    const countryName = COUNTRIES.find((c) => c.iso2 === countryIso2)?.name;
-    const dialCode = COUNTRIES.find(
-      (c) => c.iso2 === phoneCountryIso2
-    )?.dialCode;
-    const combinedPhone =
-      phone.trim() && dialCode
-        ? `${dialCode}${phone.trim().replace(/\D/g, "")}`
-        : undefined;
+    const { email: trimmedEmail } = collectedFields();
 
-    signupMutation.mutate({
-      name: `${firstName.trim()} ${lastName.trim()}`.trim(),
-      email: email.trim(),
-      password,
-      country: countryName,
-      phone: combinedPhone,
-    });
+    setSending(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email: trimmedEmail,
+        type: "sign-in",
+      });
+      if (error) {
+        // Expected until the backend session wires up the emailOTP
+        // plugin (see lib/auth-client.ts) — the modal still opens so the
+        // OTP-entry UI stays exercisable ahead of that landing.
+        console.warn("[signup] sendVerificationOtp failed", error);
+      }
+    } catch (err) {
+      console.warn("[signup] sendVerificationOtp threw", err);
+    } finally {
+      setSending(false);
+      setModalOpen(true);
+    }
   }
 
   function handleOAuthClick(provider: string) {
     // UI-only per the plan — no real OAuth wiring yet.
     console.info(`[signup] OAuth click: ${provider} (not wired up)`);
-    setOauthNotice(
-      "Social sign-up is coming soon — please use the form for now."
-    );
+  }
+
+  function handleVerified() {
+    queryClient.invalidateQueries({ queryKey: ["session"] });
+    router.push("/dashboard");
   }
 
   return (
-    <AuthShell
-      activeTab="signup"
-      title="Create your account"
-      description="Join to save your progress and unlock the full library."
-    >
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <FormField id="firstName" label="First name" required error={fieldErrors.firstName}>
-            <Input
-              id="firstName"
-              name="firstName"
-              autoComplete="given-name"
-              placeholder="Felister"
-              value={firstName}
-              invalid={Boolean(fieldErrors.firstName)}
-              onChange={(e) => setFirstName(e.target.value)}
-            />
-          </FormField>
-          <FormField id="lastName" label="Last name" required error={fieldErrors.lastName}>
-            <Input
-              id="lastName"
-              name="lastName"
-              autoComplete="family-name"
-              placeholder="Kariuki"
-              value={lastName}
-              invalid={Boolean(fieldErrors.lastName)}
-              onChange={(e) => setLastName(e.target.value)}
-            />
-          </FormField>
+    <div className="grid min-h-screen w-screen grid-cols-1 overflow-hidden md:h-screen md:grid-cols-[46%_54%]">
+      {/* Left column — this page has more fields than /login, so it scrolls
+          within its own column on md+ instead of ever clipping content
+          against the 100vh row height. */}
+      <div className="relative flex flex-col bg-white p-6 md:overflow-y-auto md:p-0">
+        {/* Pinned top-left mark — `sticky` rather than `/login`'s
+            `absolute` (see file header: this page can scroll within its
+            column on shorter viewports, and a sticky mark stays visible
+            through that instead of scrolling away with the form). */}
+        <Link
+          href="/"
+          className="static mb-8 inline-flex w-fit items-center gap-3 md:sticky md:top-10 md:left-10 md:mb-0 md:self-start"
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-navy">
+            <AppIcon icon="lucide:book-open" size={18} className="text-gold" />
+          </span>
+          <span className="text-base font-medium text-navy">
+            Wangeci Kariuki
+          </span>
+        </Link>
+
+        {/* Centered content block */}
+        <div className="flex flex-1 items-center justify-center py-10 md:py-16">
+          <div className="w-full max-w-[400px]">
+            {/* Pill tab switcher */}
+            <div className="inline-flex w-fit items-center gap-1 rounded-full bg-gray-light p-1">
+              <Link
+                href="/login"
+                className="rounded-full px-5 py-2 text-sm font-medium text-gray transition-colors duration-150 hover:text-navy"
+              >
+                Sign In
+              </Link>
+              <span className="rounded-full bg-white px-5 py-2 text-sm font-medium text-navy shadow-sm">
+                Sign Up
+              </span>
+            </div>
+
+            <h1 className="mt-6 text-[32px] leading-tight font-bold text-navy">
+              Create your account
+            </h1>
+            <p className="mt-2 text-sm text-gray">
+              Join to save your progress and unlock the full library.
+            </p>
+
+            <form onSubmit={handleSubmit} noValidate className="mt-8 flex flex-col gap-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="firstName"
+                    className="mb-2 block text-sm font-medium text-navy"
+                  >
+                    First name
+                  </label>
+                  <input
+                    id="firstName"
+                    name="firstName"
+                    autoComplete="given-name"
+                    placeholder="Felister"
+                    value={firstName}
+                    aria-invalid={Boolean(fieldErrors.firstName)}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full rounded-lg border border-line px-4 py-3 text-navy outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-gray focus:border-gold focus:shadow-[0_0_0_3px_rgba(212,166,22,0.15)]"
+                  />
+                  {fieldErrors.firstName && (
+                    <p className="mt-1.5 text-sm" style={{ color: "#B4321F" }}>
+                      {fieldErrors.firstName}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label
+                    htmlFor="lastName"
+                    className="mb-2 block text-sm font-medium text-navy"
+                  >
+                    Last name
+                  </label>
+                  <input
+                    id="lastName"
+                    name="lastName"
+                    autoComplete="family-name"
+                    placeholder="Kariuki"
+                    value={lastName}
+                    aria-invalid={Boolean(fieldErrors.lastName)}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full rounded-lg border border-line px-4 py-3 text-navy outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-gray focus:border-gold focus:shadow-[0_0_0_3px_rgba(212,166,22,0.15)]"
+                  />
+                  {fieldErrors.lastName && (
+                    <p className="mt-1.5 text-sm" style={{ color: "#B4321F" }}>
+                      {fieldErrors.lastName}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="email"
+                  className="mb-2 block text-sm font-medium text-navy"
+                >
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-lg border border-line px-4 py-3 text-navy outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-gray focus:border-gold focus:shadow-[0_0_0_3px_rgba(212,166,22,0.15)]"
+                />
+                {fieldErrors.email && (
+                  <p className="mt-1.5 text-sm" style={{ color: "#B4321F" }}>
+                    {fieldErrors.email}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField id="country" label="Country">
+                  <CountrySelect
+                    id="country"
+                    countries={COUNTRIES}
+                    value={countryIso2}
+                    onChange={setCountryIso2}
+                  />
+                </FormField>
+                <FormField
+                  id="state"
+                  label="County / State"
+                  hint={statesError ?? undefined}
+                >
+                  <StateSelect
+                    id="state"
+                    options={stateOptions}
+                    value={stateValue}
+                    onChange={setStateValue}
+                    disabled={!countryIso2 || statesLoading}
+                    placeholder={
+                      !countryIso2
+                        ? "Select a country first"
+                        : statesLoading
+                          ? "Loading…"
+                          : "Select a county/state"
+                    }
+                  />
+                </FormField>
+              </div>
+
+              <FormField id="phone" label="Phone number" error={fieldErrors.phone}>
+                <PhoneInput
+                  id="phone"
+                  countries={COUNTRIES}
+                  countryIso2={effectivePhoneCountryIso2}
+                  onCountryChange={(iso2) => {
+                    setPhoneCountryTouched(true);
+                    setPhoneCountryIso2(iso2);
+                  }}
+                  value={phone}
+                  onChange={setPhone}
+                  invalid={Boolean(fieldErrors.phone)}
+                />
+              </FormField>
+
+              {formError && (
+                <p
+                  role="alert"
+                  className="rounded-lg px-4 py-2.5 text-sm"
+                  style={{ color: "#B4321F", backgroundColor: "rgba(180,50,31,0.08)" }}
+                >
+                  {formError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={sending}
+                className="mt-1 flex h-12 w-full items-center justify-center rounded-lg bg-blue text-base font-medium text-white transition-colors duration-150 hover:bg-blue-hover disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {sending ? (
+                  <AppIcon
+                    icon="lucide:loader-circle"
+                    size={20}
+                    className="animate-spin"
+                  />
+                ) : (
+                  "Continue"
+                )}
+              </button>
+            </form>
+
+            <div className="my-6 flex items-center gap-4">
+              <div className="h-px flex-1 bg-line" />
+              <span className="text-xs font-medium tracking-[0.05em] text-gray uppercase">
+                Or Continue With
+              </span>
+              <div className="h-px flex-1 bg-line" />
+            </div>
+
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                aria-label="Continue with Google"
+                onClick={() => handleOAuthClick("Google")}
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-white transition-colors duration-150 hover:border-gold"
+              >
+                <AppIcon icon="logos:google-icon" size={20} />
+              </button>
+              <button
+                type="button"
+                aria-label="Continue with Apple"
+                onClick={() => handleOAuthClick("Apple")}
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-white transition-colors duration-150 hover:border-gold"
+              >
+                <AppIcon icon="ic:baseline-apple" size={20} className="text-black" />
+              </button>
+              <button
+                type="button"
+                aria-label="Continue with Facebook"
+                onClick={() => handleOAuthClick("Facebook")}
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-white transition-colors duration-150 hover:border-gold"
+              >
+                <AppIcon icon="logos:facebook" size={20} />
+              </button>
+            </div>
+
+            <p className="mt-8 text-center text-[13px] text-gray">
+              Already have an account?{" "}
+              <Link
+                href="/login"
+                className="font-medium text-gold hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
+          </div>
         </div>
-
-        <FormField id="email" label="Email address" required error={fieldErrors.email}>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            invalid={Boolean(fieldErrors.email)}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </FormField>
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <FormField id="country" label="Country">
-            <CountrySelect
-              id="country"
-              countries={COUNTRIES}
-              value={countryIso2}
-              onChange={setCountryIso2}
-            />
-          </FormField>
-          <FormField
-            id="state"
-            label="County / State"
-            hint={statesError ?? undefined}
-          >
-            <StateSelect
-              id="state"
-              options={stateOptions}
-              value={stateValue}
-              onChange={setStateValue}
-              disabled={!countryIso2 || statesLoading}
-              placeholder={
-                !countryIso2
-                  ? "Select a country first"
-                  : statesLoading
-                    ? "Loading…"
-                    : "Select a county/state"
-              }
-            />
-          </FormField>
-        </div>
-
-        <FormField id="phone" label="Phone number" error={fieldErrors.phone}>
-          <PhoneInput
-            id="phone"
-            countries={COUNTRIES}
-            countryIso2={phoneCountryIso2}
-            onCountryChange={(iso2) => {
-              setPhoneCountryTouched(true);
-              setPhoneCountryIso2(iso2);
-            }}
-            value={phone}
-            onChange={setPhone}
-            invalid={Boolean(fieldErrors.phone)}
-          />
-        </FormField>
-
-        <FormField
-          id="password"
-          label="Password"
-          required
-          error={fieldErrors.password}
-          hint={fieldErrors.password ? undefined : "At least 8 characters"}
-        >
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="••••••••"
-            value={password}
-            invalid={Boolean(fieldErrors.password)}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </FormField>
-
-        <FormField
-          id="confirmPassword"
-          label="Confirm password"
-          required
-          error={fieldErrors.confirmPassword}
-        >
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            placeholder="••••••••"
-            value={confirmPassword}
-            invalid={Boolean(fieldErrors.confirmPassword)}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
-        </FormField>
-
-        {formError && (
-          <p role="alert" className="rounded-xl bg-error/10 px-4 py-2.5 text-sm text-error">
-            {formError}
-          </p>
-        )}
-
-        <Button
-          type="submit"
-          size="lg"
-          className="w-full"
-          loading={signupMutation.isPending}
-        >
-          Create Account
-        </Button>
-      </form>
-
-      <div className="my-8 flex items-center gap-4">
-        <div className="h-px flex-1 bg-navy/10" />
-        <span className="text-xs font-medium tracking-[0.15em] text-gray uppercase">
-          Or Continue With
-        </span>
-        <div className="h-px flex-1 bg-navy/10" />
       </div>
 
-      <OAuthButtonRow
-        onGoogleClick={() => handleOAuthClick("Google")}
-        onAppleClick={() => handleOAuthClick("Apple")}
-        onFacebookClick={() => handleOAuthClick("Facebook")}
-      />
-      {oauthNotice && (
-        <p role="status" className="mt-4 text-center text-sm text-gray">
-          {oauthNotice}
-        </p>
-      )}
+      {/* Right column — hidden below md, matches /login */}
+      <div
+        className="relative hidden overflow-hidden md:block"
+        style={{ background: "linear-gradient(160deg, #0C2142 0%, #0F4FB1 100%)" }}
+      >
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <AuthCarousel />
+      </div>
 
-      <p className="mt-10 text-center text-sm text-gray">
-        By creating an account you join thousands of readers following
-        Felister Wangechi Kariuki's journey in{" "}
-        <span className="font-medium text-navy">From Pieces To Power</span>.
-      </p>
-    </AuthShell>
+      {modalOpen && (
+        <TwoFactorModal
+          onClose={() => setModalOpen(false)}
+          email={email.trim()}
+          initialStep="code"
+          initialMethod="email"
+          onVerified={handleVerified}
+        />
+      )}
+    </div>
   );
 }

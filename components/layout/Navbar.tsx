@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/lib/hooks/use-session";
 import { useCartStore } from "@/lib/stores/cart-store";
@@ -29,6 +29,24 @@ const NAV_LINKS: NavLink[] = [
 function isLinkActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * The "About" link is a smooth-scroll anchor to the Home page's own
+ * `id="about"` section when already on "/" (it's the same section, not a
+ * separate page there) — everywhere else it's a normal navigation to
+ * `/about`. `href` stays `/about` in both cases so it degrades gracefully
+ * without JS.
+ */
+function handleAboutLinkClick(
+  event: MouseEvent<HTMLAnchorElement>,
+  pathname: string,
+) {
+  if (pathname !== "/") return;
+  const target = document.getElementById("about");
+  if (!target) return;
+  event.preventDefault();
+  target.scrollIntoView({ behavior: "smooth" });
 }
 
 /**
@@ -76,6 +94,11 @@ export function Navbar({ className }: NavbarProps) {
                 key={link.href}
                 href={link.href}
                 aria-current={active ? "page" : undefined}
+                onClick={
+                  link.href === "/about"
+                    ? (event) => handleAboutLinkClick(event, pathname)
+                    : undefined
+                }
                 className={cn(
                   "relative py-2 text-sm font-medium text-navy/70 transition-colors hover:text-navy",
                   active && "text-navy after:absolute after:-bottom-0.5 after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-gold-bright",
@@ -154,7 +177,12 @@ export function Navbar({ className }: NavbarProps) {
                 <Link
                   key={link.href}
                   href={link.href}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(event) => {
+                    if (link.href === "/about") {
+                      handleAboutLinkClick(event, pathname);
+                    }
+                    setMobileOpen(false);
+                  }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "rounded-lg px-3 py-2.5 text-base font-medium text-navy/70",

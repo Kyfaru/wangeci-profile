@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PrelineClient } from "@/components/PrelineClient";
 import { aeonik, wayfindingSans } from "./fonts";
 import { AppProviders } from "./providers";
 import "./globals.css";
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col font-body">
         <AppProviders>{children}</AppProviders>
+        <PrelineClient />
       </body>
     </html>
   );

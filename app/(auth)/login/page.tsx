@@ -1,170 +1,249 @@
 "use client";
 
 /**
- * /login — matches the reference split-screen spec (recolored into the
- * navy/gold/cream palette) via `AuthShell`.
+ * /login — passwordless redesign (supersedes the old email+password
+ * build; see the plan's §2A "Passwordless auth redesign").
  *
- * Client-side form state + validation, POSTs to the mock `/api/auth/login`
- * route via `apiClient`. On success the `['session']` query is invalidated
- * so `useSession()` refetches everywhere it's mounted, then the user is
- * redirected to `/dashboard`. OAuth buttons are UI-only for this phase —
- * see `handleOAuthClick` below.
+ * Full-screen edge-to-edge split layout: 100vw×100vh, no outer card, no
+ * drop shadow, no cream page backdrop. This is a deliberately different
+ * treatment from `components/layout/AuthShell.tsx` (the floating
+ * card-style shell `/signup` still uses) — see the judgment-call note
+ * below.
+ *
+ * There's no password field anywhere. "Continue" only collects an email,
+ * kicks off `authClient.emailOtp.sendVerificationOtp(...)`, and opens
+ * `TwoFactorModal` pre-set to email/code-entry — the modal owns the rest
+ * of the sign-in flow (method choice, OTP entry, verify).
+ *
+ * Judgment call — AuthShell: rather than adding a `variant="fullbleed"`
+ * prop to `AuthShell` (which `/signup`, and potentially future
+ * `/verify`/`/reset-password` pages, still use in its original
+ * card-on-cream-backdrop form), this page builds its own inline layout.
+ * The two treatments share almost nothing structurally (100vw/100vh grid
+ * vs. a centered max-w-5xl card; a 4-5 slide cross-fading carousel vs. a
+ * static graphic panel; a pinned top-left mark vs. a mark inline with the
+ * form column), so threading both through one component via a variant
+ * flag would mostly be an if/else fork with little shared code — not
+ * worth the coupling risk to a shell other pages still rely on.
  */
 import { type FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AuthShell } from "@/components/layout";
-import { Button, FormField, Input, OAuthButtonRow } from "@/components/ui";
-import { apiClient, ApiError } from "@/lib/api/client";
-import type { MockUser } from "@/lib/mock-user";
-
-interface FieldErrors {
-  email?: string;
-  password?: string;
-}
+import { useQueryClient } from "@tanstack/react-query";
+import { AppIcon } from "@/lib/icons";
+import { authClient } from "@/lib/auth-client";
+import { AuthCarousel } from "@/components/auth/AuthCarousel";
+import { TwoFactorModal } from "@/components/auth/TwoFactorModal";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-interface LoginResponse {
-  user: MockUser;
-}
 
 export default function LoginPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [oauthNotice, setOauthNotice] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
-  const loginMutation = useMutation({
-    mutationFn: (body: { email: string; password: string }) =>
-      apiClient.post<LoginResponse>("/auth/login", body),
-    onSuccess: async () => {
-      // Session cookie is already set by the API response — refetch the
-      // cached session everywhere useSession() is mounted, then redirect.
-      await queryClient.invalidateQueries({ queryKey: ["session"] });
-      router.push("/dashboard");
-    },
-    onError: (error) => {
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : "Something went wrong. Please try again.";
-      setFormError(message);
-      // TODO(api): swap for real error reporting (e.g. Sentry) once the
-      // real auth backend replaces the mock route.
-      console.error("[login] request failed", error);
-    },
-  });
-
-  function validate(): FieldErrors {
-    const errors: FieldErrors = {};
-    if (!email.trim()) {
-      errors.email = "Email is required";
-    } else if (!EMAIL_PATTERN.test(email.trim())) {
-      errors.email = "Enter a valid email address";
-    }
-    if (!password) {
-      errors.password = "Password is required";
-    }
-    return errors;
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFormError(null);
 
-    const errors = validate();
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-
-    loginMutation.mutate({ email: email.trim(), password });
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailError("Email is required");
+      return;
+    }
+    if (!EMAIL_PATTERN.test(trimmed)) {
+      setEmailError("Enter a valid email address");
+      return;
+    }
+    setEmailError(null);
+    setSending(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email: trimmed,
+        type: "sign-in",
+      });
+      if (error) {
+        // Expected until the backend session wires up the emailOTP
+        // plugin (see lib/auth-client.ts) — the modal still opens so the
+        // OTP-entry UI stays exercisable ahead of that landing.
+        console.warn("[login] sendVerificationOtp failed", error);
+      }
+    } catch (err) {
+      console.warn("[login] sendVerificationOtp threw", err);
+    } finally {
+      setSending(false);
+      setModalOpen(true);
+    }
   }
 
   function handleOAuthClick(provider: string) {
-    // UI-only per the plan — no real OAuth wiring yet.
+    // UI-only for this phase — no real OAuth wiring yet.
     console.info(`[login] OAuth click: ${provider} (not wired up)`);
-    setOauthNotice(
-      "Social sign-in is coming soon — please use your email and password for now."
-    );
+  }
+
+  function handleVerified() {
+    queryClient.invalidateQueries({ queryKey: ["session"] });
+    router.push("/dashboard");
   }
 
   return (
-    <AuthShell
-      activeTab="login"
-      title="Welcome back"
-      description="Sign in to continue your reading journey."
-    >
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-        <FormField id="email" label="Email address" required error={fieldErrors.email}>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            invalid={Boolean(fieldErrors.email)}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </FormField>
-
-        <FormField id="password" label="Password" required error={fieldErrors.password}>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="••••••••"
-            value={password}
-            invalid={Boolean(fieldErrors.password)}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </FormField>
-
-        {formError && (
-          <p role="alert" className="rounded-xl bg-error/10 px-4 py-2.5 text-sm text-error">
-            {formError}
-          </p>
-        )}
-
-        <Button
-          type="submit"
-          size="lg"
-          className="w-full"
-          loading={loginMutation.isPending}
+    <div className="grid h-screen w-screen grid-cols-1 overflow-hidden md:grid-cols-[46%_54%]">
+      {/* Left column */}
+      <div className="relative flex flex-col bg-white p-6 md:p-0">
+        {/* Pinned top-left mark */}
+        <Link
+          href="/"
+          className="static mb-8 inline-flex w-fit items-center gap-3 md:absolute md:left-10 md:top-10 md:mb-0"
         >
-          Sign In
-        </Button>
-      </form>
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-navy">
+            <AppIcon icon="lucide:book-open" size={18} className="text-gold" />
+          </span>
+          <span className="text-base font-medium text-navy">
+            Wangeci Kariuki
+          </span>
+        </Link>
 
-      <div className="my-8 flex items-center gap-4">
-        <div className="h-px flex-1 bg-navy/10" />
-        <span className="text-xs font-medium tracking-[0.15em] text-gray uppercase">
-          Or Continue With
-        </span>
-        <div className="h-px flex-1 bg-navy/10" />
+        {/* Centered content block */}
+        <div className="flex flex-1 items-center justify-center">
+          <div className="w-full max-w-[400px]">
+            {/* Pill tab switcher */}
+            <div className="inline-flex w-fit items-center gap-1 rounded-full bg-gray-light p-1">
+              <span className="rounded-full bg-white px-5 py-2 text-sm font-medium text-navy shadow-sm">
+                Sign In
+              </span>
+              <Link
+                href="/signup"
+                className="rounded-full px-5 py-2 text-sm font-medium text-gray transition-colors duration-150 hover:text-navy"
+              >
+                Sign Up
+              </Link>
+            </div>
+
+            <h1 className="mt-6 text-[32px] leading-tight font-bold text-navy">
+              Welcome back
+            </h1>
+            <p className="mt-2 text-sm text-gray">
+              Sign in to continue your reading journey.
+            </p>
+
+            <form onSubmit={handleSubmit} noValidate className="mt-8">
+              <label
+                htmlFor="email"
+                className="mb-2 block text-sm font-medium text-navy"
+              >
+                Email address
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                aria-invalid={Boolean(emailError)}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-line px-4 py-3 text-navy outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-gray focus:border-gold focus:shadow-[0_0_0_3px_rgba(212,166,22,0.15)]"
+              />
+              {emailError && (
+                <p className="mt-1.5 text-sm" style={{ color: "#B4321F" }}>
+                  {emailError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={sending}
+                className="mt-6 flex h-12 w-full items-center justify-center rounded-lg bg-blue text-base font-medium text-white transition-colors duration-150 hover:bg-blue-hover disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {sending ? (
+                  <AppIcon
+                    icon="lucide:loader-circle"
+                    size={20}
+                    className="animate-spin"
+                  />
+                ) : (
+                  "Continue"
+                )}
+              </button>
+            </form>
+
+            <div className="my-6 flex items-center gap-4">
+              <div className="h-px flex-1 bg-line" />
+              <span className="text-xs font-medium tracking-[0.05em] text-gray uppercase">
+                Or Continue With
+              </span>
+              <div className="h-px flex-1 bg-line" />
+            </div>
+
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                aria-label="Continue with Google"
+                onClick={() => handleOAuthClick("Google")}
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-white transition-colors duration-150 hover:border-gold"
+              >
+                <AppIcon icon="logos:google-icon" size={20} />
+              </button>
+              <button
+                type="button"
+                aria-label="Continue with Apple"
+                onClick={() => handleOAuthClick("Apple")}
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-white transition-colors duration-150 hover:border-gold"
+              >
+                <AppIcon icon="ic:baseline-apple" size={20} className="text-black" />
+              </button>
+              <button
+                type="button"
+                aria-label="Continue with Facebook"
+                onClick={() => handleOAuthClick("Facebook")}
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-white transition-colors duration-150 hover:border-gold"
+              >
+                <AppIcon icon="logos:facebook" size={20} />
+              </button>
+            </div>
+
+            <p className="mt-8 text-center text-[13px] text-gray">
+              New here?{" "}
+              <Link
+                href="/signup"
+                className="font-medium text-gold hover:underline"
+              >
+                Create an account
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
 
-      <OAuthButtonRow
-        onGoogleClick={() => handleOAuthClick("Google")}
-        onAppleClick={() => handleOAuthClick("Apple")}
-        onFacebookClick={() => handleOAuthClick("Facebook")}
-      />
-      {oauthNotice && (
-        <p role="status" className="mt-4 text-center text-sm text-gray">
-          {oauthNotice}
-        </p>
-      )}
+      {/* Right column — hidden below md, per spec */}
+      <div
+        className="relative hidden overflow-hidden md:block"
+        style={{ background: "linear-gradient(160deg, #0C2142 0%, #0F4FB1 100%)" }}
+      >
+        {/* Bottom layer: dot-grid texture, white ~4% opacity, ~24px spacing. */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <AuthCarousel />
+      </div>
 
-      <p className="mt-10 text-center text-sm text-gray">
-        New here? Create an account to save your progress, unlock exclusive
-        chapters, and join the community around{" "}
-        <span className="font-medium text-navy">From Pieces To Power</span>.
-      </p>
-    </AuthShell>
+      {modalOpen && (
+        <TwoFactorModal
+          onClose={() => setModalOpen(false)}
+          email={email.trim()}
+          initialStep="code"
+          initialMethod="email"
+          onVerified={handleVerified}
+        />
+      )}
+    </div>
   );
 }

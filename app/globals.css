@@ -1,4 +1,27 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+/*
+ * Preline UI — the project's structural/interactive component library
+ * going forward (navbars, menus, accordions, tabs, dropdowns, carousels,
+ * etc.). `@source` tells Tailwind to scan Preline's JS for the classes its
+ * runtime toggles, so those utilities aren't purged. `theme.css` layers
+ * underneath the design tokens below — it defines its own `--color-*`/
+ * `--font-*`/`--radius-*` names (all `preline-`/`custom-`/`border`
+ * prefixed) which don't collide with this project's `--navy`/`--gold`/
+ * `--cream`/etc. tokens, so it never overrides them.
+ */
+@import "preline/variants.css";
+@source "../node_modules/preline/dist/*.js";
+@import "preline/theme.css";
+
+/* @preline/pin-input — used by TwoFactorModal's OTP code entry. This
+   plugin package doesn't define a CSS "exports" map (unlike the base
+   "preline" package), so its stylesheets are imported by relative path
+   per its own README rather than as bare specifiers. */
+@source "../node_modules/@preline/pin-input/*.js";
+@import "../node_modules/@preline/pin-input/variants.css";
+@import "../node_modules/@preline/pin-input/theme.css";
 
 /*
  * Design tokens — Wangeci Kariuki author/entrepreneur platform.
@@ -20,6 +43,16 @@
   /* Not in the Figma palette — added for form validation states only. */
   --error: #b3261e;
 
+  /* Added for the passwordless login/2FA-modal redesign — flat blue CTA
+     ("Continue" / "Send code" / "Verify & sign in") and its hover state,
+     plus a light hairline border color distinct from --gray-light. Not in
+     the original Figma palette (only 4 frames were designed there and
+     none of them is this login treatment), but named/tokenized the same
+     way as everything else here rather than left as inline hex. */
+  --blue: #0f4fb1;
+  --blue-hover: #0d3d8f;
+  --line: #d9d9d9;
+
   /* Semantic surface tokens */
   --background: var(--cream);
   --foreground: var(--navy);
@@ -37,6 +70,9 @@
   --color-black: var(--black);
   --color-white: var(--white);
   --color-error: var(--error);
+  --color-blue: var(--blue);
+  --color-blue-hover: var(--blue-hover);
+  --color-line: var(--line);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -53,4 +89,40 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-body), system-ui, sans-serif;
+}
+
+/*
+ * Shake-on-error for `TwoFactorModal`'s PIN input row (±4px translateX,
+ * 3 cycles, 300ms). Not a Tailwind utility — kept here rather than inline
+ * since keyframes can't be expressed as a Tailwind arbitrary value.
+ * `TwoFactorModal` only ever sets `data-shake="true"` when the user
+ * doesn't prefer reduced motion, but the media query below is a second,
+ * belt-and-suspenders guard against the animation itself.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes shake-x {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    16.66% {
+      transform: translateX(-4px);
+    }
+    33.33% {
+      transform: translateX(4px);
+    }
+    50% {
+      transform: translateX(-4px);
+    }
+    66.66% {
+      transform: translateX(4px);
+    }
+    83.33% {
+      transform: translateX(-4px);
+    }
+  }
+
+  .shake-target[data-shake="true"] {
+    animation: shake-x 300ms ease-in-out;
+  }
 }
