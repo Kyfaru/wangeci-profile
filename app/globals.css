@@ -1,26 +1,56 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens — Wangeci Kariuki author/entrepreneur platform.
+ * Palette confirmed from Figma. Extend this block rather than reaching
+ * for arbitrary hex values in components.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand palette (raw values) */
+  --navy: #0c2142;
+  --gold: #d4a616;
+  --gold-bright: #fdc105;
+  --cream: #f5f0e6;
+  --green: #025936;
+  --gray: #8c8c8c;
+  --gray-light: #f6f6f6;
+  --black: #000000;
+  --white: #ffffff;
+
+  /* Not in the Figma palette — added for form validation states only. */
+  --error: #b3261e;
+
+  /* Semantic surface tokens */
+  --background: var(--cream);
+  --foreground: var(--navy);
 }
 
 @theme inline {
+  /* Colors — usable as bg-navy, text-gold, border-cream, etc. */
+  --color-navy: var(--navy);
+  --color-gold: var(--gold);
+  --color-gold-bright: var(--gold-bright);
+  --color-cream: var(--cream);
+  --color-green: var(--green);
+  --color-gray: var(--gray);
+  --color-gray-light: var(--gray-light);
+  --color-black: var(--black);
+  --color-white: var(--white);
+  --color-error: var(--error);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Fonts — font-body / font-display utilities */
+  --font-body: var(--font-aeonik);
+  --font-display: var(--font-wayfinding-sans);
+
+  /* Radius — rounded-card utility for the Figma "rounded card" aesthetic */
+  --radius-card: 1.5rem;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
 }
