@@ -12,7 +12,8 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { SpinnerIcon } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { apiClient, ApiError } from "@/lib/api/client";
 import { useCartStore, type CartItem } from "@/lib/stores/cart-store";
 import { ShoppingBagIcon } from "./icons";
@@ -65,16 +66,29 @@ export function BuyBookButton({
 
   return (
     <div className={className}>
-      <Button
+      {/*
+        White pill per the Figma "Book Preview" frame — deliberately not
+        `components/ui/Button` (whose variants are navy/gold, not white on
+        black) since that primitive is a read-only surface for this task.
+      */}
+      <button
         type="button"
-        variant="secondary"
-        size="lg"
-        icon={<ShoppingBagIcon className="size-5" />}
-        loading={isPending}
+        disabled={isPending}
+        aria-busy={isPending || undefined}
         onClick={handleClick}
+        className={cn(
+          "inline-flex h-16 items-center justify-center gap-3 rounded-full bg-white px-8 text-lg font-medium text-black transition-colors duration-150 hover:bg-white/90 active:bg-white/80 disabled:cursor-not-allowed disabled:opacity-50",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-bright focus-visible:ring-offset-2 focus-visible:ring-offset-navy",
+          "sm:h-[72px] sm:px-9 sm:text-xl",
+        )}
       >
+        {isPending ? (
+          <SpinnerIcon className="size-6" />
+        ) : (
+          <ShoppingBagIcon className="size-6 sm:size-7" />
+        )}
         Buy Book Now
-      </Button>
+      </button>
       {error && (
         <p role="alert" className="mt-2 text-sm text-error">
           {error}

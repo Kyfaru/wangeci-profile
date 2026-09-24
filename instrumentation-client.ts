@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/nextjs";
-import { env } from "@/lib/env";
 
 /**
  * Initializes Sentry for the browser.
@@ -16,12 +15,23 @@ import { env } from "@/lib/env";
  * Turbopack (node_modules/@sentry/nextjs/build/cjs/config/webpack.js:213).
  * This diverges from the file name suggested in the task brief — flagged
  * here and in the final report.
+ *
+ * Deliberately does NOT import `@/lib/env` — that module's schema validates
+ * server-only secrets (DATABASE_URL, PAYSTACK_SECRET_KEY, R2_*, etc.) via
+ * `envSchema.parse(process.env)` at import time, and this file ships to the
+ * browser. Next.js only inlines `NEXT_PUBLIC_*` vars into client bundles, so
+ * every other var resolves to `undefined` there and `.parse()` throws on
+ * every single page load, breaking all client-side interactivity site-wide
+ * (found independently by two agents while verifying unrelated pages).
+ * `NEXT_PUBLIC_SENTRY_DSN` isn't defined yet anywhere in this project, so
+ * `dsn` below is a supported no-op until that's added — wiring up an actual
+ * public DSN is a separate follow-up, not part of this fix.
  */
 Sentry.init({
   // `undefined` DSN is a supported no-op — see sentry.server.config.ts.
-  dsn: env.SENTRY_DSN,
+  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  tracesSampleRate: env.NODE_ENV === "production" ? 0.1 : 1.0,
+  tracesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 1.0,
 
   integrations: [
     Sentry.replayIntegration({

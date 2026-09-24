@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { BuyBookButton } from "@/components/store/BuyBookButton";
 import { ClockIcon } from "@/components/store/icons";
 import { TableOfContentsCard } from "@/components/store/TableOfContentsCard";
-import { Card, RatingBadge, StatChip } from "@/components/ui";
+import { StarIcon } from "@/components/ui";
 import {
   findBookBySlug,
   MOCK_BOOKS,
