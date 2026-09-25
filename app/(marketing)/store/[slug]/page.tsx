@@ -17,10 +17,11 @@ export async function generateMetadata({ params }: PageProps<"/store/[slug]">): 
   return { title: `${book.title} — Felister Wangechi Kariuki`, description: book.description };
 }
 
-// Chips shrink with the width of their column (container query, not the screen), so the
-// duration + rating chips stay on one row on phones and narrow tablet columns alike.
-const chip = "flex h-9 items-center gap-2 rounded-[25px] bg-white/15 px-2 text-[11px] font-medium text-white @sm:h-[42px] @sm:gap-3 @sm:px-[11px] @sm:text-[13px]";
-const chipIcon = "clamp(20px,6cqw,25px)";
+// Chips are sized in em and the row's font-size follows the width of its column (cqw, capped at
+// the Figma 13px), so the whole chip - height, padding, icon, gaps - scales together and the
+// duration + rating chips stay on one row from very small phones up.
+const chip = "flex h-[3.2em] items-center gap-[0.9em] rounded-full bg-white/15 px-[0.85em] font-medium text-white";
+const chipIcon = "1.9em";
 
 /** `/store/[slug]` — Book Preview (Figma "Book Preview" frame). */
 export default async function BookPreviewPage({ params }: PageProps<"/store/[slug]">) {
@@ -43,7 +44,7 @@ export default async function BookPreviewPage({ params }: PageProps<"/store/[slu
             <div className="cover-orb absolute -left-[10cqw] -top-[56cqw] aspect-square w-[120cqw] rounded-full bg-white/10" />
           </div>
         </div>
-        <div className="mx-auto grid max-w-[1215px] items-center gap-y-2 md:grid-cols-[min(477px,42%)_minmax(0,1fr)] md:gap-x-[clamp(32px,7vw,104px)]">
+        <div className="mx-auto grid max-w-[1215px] items-center gap-y-2 md:gap-y-8 lg:grid-cols-[477px_minmax(0,1fr)] lg:gap-x-[104px]">
           {/* Cover card */}
           <div className="relative mx-auto aspect-[477/620] w-full max-w-[477px] md:overflow-hidden md:rounded-[37px] md:bg-[rgb(12_58_130/0.64)]">
             {/* Figma "Ellipse 1": 505px circle at (238.5, 95.5) in the 477x620 card, white @ 10%, clipped by the card.
@@ -54,22 +55,22 @@ export default async function BookPreviewPage({ params }: PageProps<"/store/[slu
               </div>
             </div>
             <div className="absolute left-[14.9%] top-[13.5%] aspect-[334.7/473] w-[70.2%] overflow-hidden rounded-[20px]">
-              <Image src={book.cover} alt={`${book.title} cover`} fill preload sizes="(min-width: 768px) 25vw, 70vw" className="object-cover" />
+              <Image src={book.cover} alt={`${book.title} cover`} fill preload sizes="(min-width: 768px) 335px, 70vw" className="object-cover" />
             </div>
           </div>
 
-          <div className="@container min-w-0 text-center md:text-left">
+          <div className="@container min-w-0 text-center lg:text-left">
             <p className="text-xl font-medium text-[#989898] md:text-2xl">{book.author}</p>
             {/* mb: 54px visible gap to the chips (same as chips -> buttons); 0.125em is the empty space under the letters inside the line box. */}
-            <h1 className="mb-[calc(54px_-_0.125em)] mt-5 font-display text-[clamp(3.25rem,6.67vw,6rem)] font-normal leading-[0.92] tracking-[-0.02em] text-white">
+            <h1 className="mb-[calc(54px_-_0.125em)] mt-5 font-display text-[clamp(2.5rem,13.5vw,3.25rem)] font-normal md:text-[clamp(4rem,9vw,6rem)] lg:text-[min(6rem,18.5cqw)] leading-[0.92] tracking-[-0.02em] text-white">
               {book.title}
             </h1>
 
-            <div className="flex flex-wrap items-center justify-center gap-2 md:justify-start @sm:gap-6">
+            <div className="flex flex-wrap items-center justify-center gap-[0.9em] text-[clamp(9px,3.4cqw,13px)] lg:justify-start">
               {(preview.readTime || preview.audioTime) && (
                 <div className={chip}>
                   <MaskIcon name="carbon--time-filled" size={chipIcon} />
-                  <span className="flex items-center gap-2 @sm:gap-3">
+                  <span className="flex items-center gap-[0.9em]">
                     {preview.readTime}
                     {preview.readTime && preview.audioTime && (
                       // eslint-disable-next-line @next/next/no-img-element -- decorative SVG from Figma
@@ -79,7 +80,7 @@ export default async function BookPreviewPage({ params }: PageProps<"/store/[slu
                   </span>
                 </div>
               )}
-              <div className={`${chip} pr-3 @sm:pr-5`}>
+              <div className={`${chip} pr-[1.3em]`}>
                 <MaskIcon name="ic--baseline-star-rate" size={chipIcon} className="text-gold-bright" />
                 {book.rating} Rating
               </div>
@@ -103,17 +104,17 @@ export default async function BookPreviewPage({ params }: PageProps<"/store/[slu
       {/* Content panel */}
       <div className="rounded-t-[60px] bg-cream px-6 pb-24 pt-12 md:px-[6vw] lg:rounded-t-[110px] lg:px-[7.6vw] lg:pt-[89px]">
         <div
-          className={`mx-auto grid max-w-[1215px] items-start gap-10 ${hasToc ? "lg:grid-cols-[clamp(280px,29vw,420px)_minmax(0,1fr)] lg:gap-x-[calc(clamp(48px,8vw,120px)_-_5px)]" : ""}`}
+          className={`mx-auto grid max-w-[695px] items-start gap-10 lg:max-w-[1215px] ${hasToc ? "lg:grid-cols-[clamp(280px,29vw,420px)_minmax(0,1fr)] lg:gap-x-[calc(clamp(48px,8vw,120px)_-_5px)]" : ""}`}
         >
           {hasToc && <BookToc sections={preview.sections} />}
 
           <div className="min-w-0 max-w-[695px]">
-            <p className="font-display text-xl leading-normal text-black lg:text-2xl">{preview.intro || book.longDescription}</p>
+            <p className="font-display text-xl leading-normal text-black xl:text-2xl">{preview.intro || book.longDescription}</p>
 
             {preview.sections.map((s) => (
               <section key={s.id} id={s.id} className="scroll-mt-32 pt-10 lg:pt-14">
-                <h2 className="text-2xl font-bold text-black md:text-3xl lg:text-4xl">{s.title}</h2>
-                <div className="mt-6 space-y-3 text-lg leading-[1.6] text-[#373737] md:text-xl lg:text-2xl">
+                <h2 className="text-2xl font-bold text-black md:text-3xl xl:text-4xl">{s.title}</h2>
+                <div className="mt-6 space-y-3 text-lg leading-[1.6] text-[#373737] md:text-xl xl:text-2xl">
                   {s.paragraphs.map((p) => (
                     <p key={p}>{p}</p>
                   ))}

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { FillButton } from "@/components/ui/FillButton";
 import { MaskIcon } from "@/components/ui/MaskIcon";
-import { BOOK_HREF, NAVBAR_LINKS } from "@/lib/content/landing";
+import { BOOK, BOOK_HREF, NAVBAR_LINKS } from "@/lib/content/landing";
 import { cn } from "@/lib/cn";
 import { useHydrated } from "@/lib/hooks/use-hydrated";
 import { useCartStore } from "@/lib/stores/cart-store";
@@ -23,12 +24,21 @@ import { useCartStore } from "@/lib/stores/cart-store";
 export function Navbar() {
   const pathname = usePathname();
   const full = pathname.startsWith("/store/") || pathname === "/cart";
+  const wide = pathname === "/"; // only the landing page gets the full-width mobile menu
   const hasHero = pathname === "/" || pathname.startsWith("/store/");
   // Path whose hero has scrolled away. Keyed by path because this navbar persists across
   // client-side navigations: a plain boolean would carry the previous page's state over.
   const [pastHeroPath, setPastHeroPath] = useState<string | null>(null);
   const pastHero = pastHeroPath === pathname;
+  // Mobile menu: closed again on every route change (this navbar persists across pages). Adjusting state
+  // during render, the React-recommended way to reset state when a value changes, unlike an effect.
   const [open, setOpen] = useState(false);
+  const [menuPath, setMenuPath] = useState(pathname);
+  if (menuPath !== pathname) {
+    setMenuPath(pathname);
+    setOpen(false);
+  }
+  const closeMenu = () => setOpen(false);
   const solid = !hasHero || pastHero;
   const hydrated = useHydrated();
   const cartCount = useCartStore((s) => s.items.reduce((n, i) => n + i.qty, 0));
@@ -155,25 +165,53 @@ export function Navbar() {
 
         <AnimatePresence>
           {open && (
-            <motion.ul
+            // Landing page: full width of the bar (inset by the header's 16px). Every other page: a compact
+            // panel under the hamburger, half the width (min 11rem), inset from the screen edge.
+            // From 390px (medium/large phones) non-book pages get a second column: the book cover, with
+            // Get My Book centred under it. Book/cart pages keep just the links.
+            <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="absolute inset-x-0 top-full mt-2 flex flex-col gap-4 rounded-3xl border border-navy/10 bg-cream/90 p-6 text-navy shadow-lg backdrop-blur-xl md:hidden"
-            >
-              {NAVBAR_LINKS.map((l) => (
-                <li key={l.href}>
-                  <Link href={l.href} onClick={() => setOpen(false)} className="text-xl font-light">
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-              {!full && (
-                <li>
-                  <FillButton href={BOOK_HREF}>Get My Book</FillButton>
-                </li>
+              className={cn(
+                "absolute top-full mt-2 border border-navy/10 bg-cream/90 text-navy shadow-lg backdrop-blur-xl md:hidden",
+                wide
+                  ? "inset-x-0 rounded-3xl p-5"
+                  : cn("w-1/2 min-w-44 rounded-2xl p-3", full ? "right-4" : "right-0 min-[390px]:w-max"),
               )}
-            </motion.ul>
+            >
+              <div
+                className={cn(
+                  "grid gap-x-3 gap-y-3",
+                  !full && (wide ? "min-[390px]:grid-cols-2" : "min-[390px]:grid-cols-[auto_auto]"),
+                )}
+              >
+                <ul className="flex flex-col gap-3">
+                  {NAVBAR_LINKS.map((l) => (
+                    <li key={l.href}>
+                      <Link href={l.href} onClick={closeMenu} className={cn("font-light", wide ? "text-xl" : "text-lg")}>
+                        {l.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {!full && (
+                  <div className="flex flex-col items-center gap-3">
+                    <Link
+                      href={BOOK_HREF}
+                      onClick={closeMenu}
+                      aria-label="From Pieces To Power"
+                      className={cn("hidden min-[390px]:block", wide ? "w-full max-w-[9.5rem]" : "w-[6.5rem]")}
+                    >
+                      <Image src={BOOK.cover} alt="" width={152} height={215} className="h-auto w-full rounded-lg object-cover shadow-md" />
+                    </Link>
+                    <FillButton href={BOOK_HREF} className={cn("w-full text-center", wide ? "px-4! py-2! text-sm!" : "px-2.5! py-2! text-xs!")}>
+                      Get My Book
+                    </FillButton>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </nav>
