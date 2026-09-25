@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/forms";
 
+/* "wide" = 768px+ AND landscape-ish (aspect >= 6:5): desktops, laptops, landscape tablets. The hero uses its
+   side-by-side desktop composition there. Upright tablets (iPad, iPad mini/Pro, Surface Pro in portrait)
+   keep the phone composition, scaled up. */
+@custom-variant wide (@media (min-width: 768px) and (min-aspect-ratio: 6/5));
+
 /*
  * Preline UI — the project's structural/interactive component library
  * going forward (navbars, menus, accordions, tabs, dropdowns, carousels,

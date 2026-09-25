@@ -10,7 +10,7 @@ export function BookSection() {
   return (
     // Mobile: no card — the whole section carries the gradient. md+: white page with the rounded gradient card.
     <section className="bg-[linear-gradient(79.63deg,var(--navy)_18.7%,var(--blue)_97.1%)] md:bg-white md:bg-none md:py-12">
-      <div className="flex flex-col items-center gap-12 overflow-hidden px-4 py-14 md:mx-[3.5vw] md:rounded-[45px] md:bg-[linear-gradient(79.63deg,var(--navy)_18.7%,var(--blue)_97.1%)] md:px-8 lg:min-h-[758px] lg:flex-row lg:justify-between lg:gap-8 lg:px-[5.7vw]">
+      <div className="flex flex-col items-center gap-12 overflow-hidden px-4 py-14 md:mx-[3.5vw] md:rounded-[45px] md:bg-[linear-gradient(79.63deg,var(--navy)_18.7%,var(--blue)_97.1%)] md:px-8 lg:min-h-[758px] lg:flex-row lg:justify-center lg:gap-[clamp(2rem,3.89vw,4rem)] lg:px-[5.7vw]">
         <motion.div
           initial={{ opacity: 0, x: -60 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -54,13 +54,13 @@ export function BookSection() {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.8, delay: 0.15 }}
-          className="relative order-first h-[377px] w-[267px] shrink-0 overflow-hidden rounded-r-[30px] border-[3px] border-gold md:order-none md:h-[476px] md:w-[337px] lg:mr-[7%]"
+          className="relative order-first h-[377px] w-[267px] shrink-0 overflow-hidden rounded-r-[30px] border-[3px] border-gold md:order-none md:h-[476px] md:w-[337px] lg:aspect-[337/476] lg:h-auto lg:w-[clamp(337px,29.17vw,420px)] lg:rounded-r-[clamp(30px,2.59vw,37px)]"
         >
           <Image
             src={BOOK.cover}
             alt="From Pieces To Power — book cover"
             fill
-            sizes="337px"
+            sizes="(min-width: 1024px) 420px, (min-width: 768px) 337px, 267px"
             className="object-cover"
           />
         </motion.div>

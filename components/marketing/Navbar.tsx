@@ -75,7 +75,7 @@ export function Navbar() {
                 // Sits lower (Figma: 44px from the top) while transparent over the hero; back up once it has a background.
                 solid ? "py-3 md:py-4" : "pb-3 pt-6 md:pb-4 md:pt-11",
               )
-            : "rounded-full px-6 py-2.5 md:ml-[calc(10.7vw-1.5rem)] md:w-[52vw] md:min-w-[720px] md:max-w-[860px]",
+            : "rounded-full px-6 py-2.5 md:mx-auto md:w-fit md:gap-x-10 lg:mx-0 lg:ml-[calc(10.7vw-1.5rem)] lg:w-[52vw] lg:min-w-[720px] lg:max-w-[860px] lg:gap-x-0", // md–lg (iPad portrait): centred, sized to content so it never overflows
           solid
             ? cn(
                 "border border-navy/10 bg-cream/70 text-navy backdrop-blur-xl",
