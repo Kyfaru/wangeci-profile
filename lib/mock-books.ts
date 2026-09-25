@@ -62,14 +62,14 @@ export const MOCK_BOOKS: Book[] = [
     title: "From Pieces To Power",
     subtitle: "A Memoir of Rebuilding After Everything Fell Apart",
     author: "Felister \"Wangechi\" Kariuki",
-    cover: "/books/from-pieces-to-power/cover.jpg",
+    cover: "/images/From Pieces to Power Front Cover.png",
     description:
       "A raw, unflinching memoir about losing everything and rebuilding a life, a business, and a sense of self from the ground up.",
     longDescription:
       "When Felister \"Wangechi\" Kariuki lost her marriage, her income, and her sense of direction within the same year, she had two choices: disappear into the wreckage, or use every piece of it to build something new. From Pieces To Power is the story of that rebuild — messy, funny, spiritual, and deeply practical. Part memoir, part field guide for anyone starting over, it follows Wangechi from a single rented room in Nairobi to founding Fechi Organics and becoming a voice for women rebuilding after loss. Readers walk away with not just her story, but the frameworks she used to reclaim her time, her money, and her voice.",
-    price: 1800,
+    price: 2000,
     currency: "KES",
-    rating: 4.8,
+    rating: 4.2,
     reviewCount: 214,
     tags: ["memoir", "entrepreneurship", "personal-growth", "women"],
     publishedAt: "2025-03-10T00:00:00.000Z",

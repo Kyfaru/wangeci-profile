@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "motion/react";
+import { ToastProvider } from "@/components/toast/ToastProvider";
 
 /**
  * Default staleTime (5 min) matches the most common cache-mapping entry
@@ -36,6 +38,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(makeQueryClient);
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    // reducedMotion="user": motion drops transform/layout animation for users who ask for less.
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
+    </MotionConfig>
   );
 }
