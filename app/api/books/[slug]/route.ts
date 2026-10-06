@@ -1,27 +1,12 @@
 import { NextResponse } from "next/server";
-import { findBookBySlug } from "@/lib/mock-books";
+import { getBookBySlug } from "@/lib/catalogue";
 
 /**
- * GET /api/books/[slug]: public catalogue metadata only.
- * Chapter text is never returned here (that was the paywall bypass); paid text
- * is served only after a session and Entitlement check (Phase 4).
+ * GET /api/books/[slug]: public catalogue metadata only (no chapter text, ever).
+ * Paid text is served only after a session and Entitlement check (Phase 4).
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const book = findBookBySlug(slug);
+  const book = await getBookBySlug((await params).slug);
   if (!book) return NextResponse.json({ error: "Book not found" }, { status: 404 });
-
-  return NextResponse.json({
-    book: {
-      slug: book.slug,
-      title: book.title,
-      subtitle: book.subtitle,
-      author: book.author,
-      cover: book.cover,
-      description: book.description,
-      price: book.price,
-      currency: book.currency,
-      editions: book.editions.map((e) => ({ id: e.id, format: e.format, label: e.label, chapterCount: e.chapters.length })),
-    },
-  });
+  return NextResponse.json({ book });
 }

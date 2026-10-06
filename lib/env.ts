@@ -75,6 +75,10 @@ const envSchema = z.object({
   QSTASH_CURRENT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
   QSTASH_NEXT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
 
+  // Where urgent admin alerts and contact-form messages are emailed (Wangeci's mailbox).
+  // TODO(client): her address. Without it the bell still works, but no email is sent.
+  CONTACT_INBOX_EMAIL: z.preprocess((v) => (v === "" ? undefined : v), z.string().email().optional()),
+
   // Google sign-in. Optional until the OAuth client exists; the button hides without them.
   GOOGLE_CLIENT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
   GOOGLE_CLIENT_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),

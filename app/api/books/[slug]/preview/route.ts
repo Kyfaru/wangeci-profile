@@ -1,25 +1,10 @@
 import { NextResponse } from "next/server";
-import { findBookBySlug } from "@/lib/mock-books";
+import { getBookBySlug, getFreePreview } from "@/lib/catalogue";
 
-/** GET /api/books/[slug]/preview: only chapters flagged isFreePreview can ever leave here. */
+/** GET /api/books/[slug]/preview: the free chapter. getFreePreview filters on isFreePreview in the query itself. */
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const book = findBookBySlug(slug);
+  const book = await getBookBySlug(slug);
   if (!book) return NextResponse.json({ error: "Book not found" }, { status: 404 });
-
-  const ebook = book.editions.find((e) => e.format === "ebook");
-  const previewChapter = ebook?.chapters.find((c) => c.isFreePreview) ?? null;
-
-  return NextResponse.json({
-    slug: book.slug,
-    title: book.title,
-    subtitle: book.subtitle,
-    author: book.author,
-    cover: book.cover,
-    description: book.description,
-    price: book.price,
-    currency: book.currency,
-    previewChapter,
-    editions: book.editions.map((e) => ({ id: e.id, format: e.format, label: e.label, chapterCount: e.chapters.length })),
-  });
+  return NextResponse.json({ slug: book.slug, title: book.title, previewChapter: await getFreePreview(slug) });
 }

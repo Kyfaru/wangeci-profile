@@ -91,7 +91,9 @@ export function SignUpForm({ redirect, turnstileSiteKey }: { redirect: string; t
           {busy ? "Sending code..." : "Create account →"}
         </button>
         <p className="text-center text-xs text-navy/50">
-          By creating an account you agree to the Terms &amp; Conditions and Privacy Policy.
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="underline">Terms &amp; Conditions</Link> and{" "}
+          <Link href="/privacy" className="underline">Privacy Policy</Link>.
         </p>
       </form>
 

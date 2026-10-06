@@ -243,6 +243,14 @@ export function Footer() {
             </Link>
           </div>
 
+          <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-white/60">
+            <Link href="/contact" className={linkClass}>Contact</Link>
+            <Link href="/terms" className={linkClass}>Terms</Link>
+            <Link href="/privacy" className={linkClass}>Privacy</Link>
+            <Link href="/refunds" className={linkClass}>Refunds</Link>
+            <Link href="/cookies" className={linkClass}>Cookies</Link>
+          </nav>
+
           <p className="text-center md:text-left">
             &copy; {new Date().getFullYear()} {SITE.authorName}. All rights reserved.
           </p>

@@ -39,6 +39,14 @@ async function main() {
     create: { id: "seed-edition-audiobook", workId: work.id, format: "AUDIOBOOK", title: "From Pieces To Power, audiobook (SEED data)", narrator: "TODO(client)", price: "200.00", isActive: false }, // inactive until real audio exists
   });
 
+  // Cover: bucket "local" means a file in /public (real covers are uploaded to R2 by scripts/publish-edition.ts).
+  const hasCover = await prisma.asset.findFirst({ where: { editionId: ebook.id, kind: "COVER_IMAGE" } });
+  if (!hasCover) {
+    await prisma.asset.create({
+      data: { editionId: ebook.id, kind: "COVER_IMAGE", bucket: "local", key: "/images/from-pieces-to-power-front-cover.png", mimeType: "image/png", sizeBytes: 0 },
+    });
+  }
+
   for (const c of CHAPTERS) {
     const wordCount = 5;
     await prisma.chapter.upsert({

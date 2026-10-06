@@ -25,3 +25,12 @@
 - **Device id**: random httpOnly cookie from proxy.ts, stored on session.deviceId and user_device. Not a fingerprint.
 - **Turnstile** via the captcha plugin on the two send endpoints; Cloudflare test keys locally.
 - **Facebook** not built (needs a Meta app); Apple removed.
+
+## Phase 2
+- **Catalogue**: read from the database on demand with a 5 minute cache (revalidate = 300), not at build time, because the build has no database. Digital only: PAPERBACK editions are ignored.
+- **Cover source**: Asset kind COVER_IMAGE; bucket "local" means a file in /public (used by the seed), otherwise the public R2 bucket. Fallback is the memoir cover. No new column was added.
+- **Contact form**: Turnstile is checked on the server by lib/turnstile.ts (not the auth captcha plugin, which only covers auth endpoints). Honeypot answers 200 and does nothing.
+- **SupportBridge** seam in lib/support-bridge.ts; today = admin bell (owner and support) plus an email to CONTACT_INBOX_EMAIL.
+- **Legal pages** are drafts with a visible banner, written to mention the Kenya Data Protection Act 2019, processors, and deletion requests; refund window, entity name and retention periods are TODO(client).
+- **Publishing** is a script (scripts/publish-edition.ts) until the admin upload page exists; it is inactive-by-default and refuses non-local databases without --yes.
+- **Sitemap and robots** exclude private areas; robots blocks everything unless NEXT_PUBLIC_SITE_ENV=production.

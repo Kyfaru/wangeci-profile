@@ -6,9 +6,9 @@
 
 /** `live: false` links stay hidden until their page exists (Phase 2 flips them). */
 const ALL_NAV_LINKS = [
-  { label: "About Me", href: "/about", live: false },
-  { label: "Store", href: "/store", live: false },
-  { label: "Services", href: "/services", live: false },
+  { label: "About Me", href: "/about", live: true },
+  { label: "Store", href: "/store", live: true },
+  { label: "Services", href: "/services", live: true },
   { label: "Blog", href: "/blog", live: false },
 ] as const;
 

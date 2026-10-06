@@ -1,0 +1,8 @@
+{
+  "work": { "slug": "demo-book", "title": "Demo Book (example)", "author": "Wangeci Kariuki", "description": "Example manifest. Replace with the real synopsis." },
+  "edition": { "format": "EPUB", "title": "Demo Book, ebook", "price": 500, "currency": "KES" },
+  "chapters": [
+    { "title": "Chapter 1", "file": "ch1.txt", "isFreePreview": true },
+    { "title": "Chapter 2", "file": "ch2.txt" }
+  ]
+}
