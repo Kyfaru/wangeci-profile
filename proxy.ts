@@ -20,7 +20,8 @@ function buildCsp(nonce: string) {
     "img-src 'self' data: blob: https://*.r2.dev",
     "font-src 'self' data:",
     "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
-    "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com",
+    "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://challenges.cloudflare.com",
+    "frame-src https://challenges.cloudflare.com", // Turnstile widget
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -46,6 +47,18 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy-Report-Only", csp);
+
+  // Random per-browser id, issued by the server. A device hint for the one-session rule, not a
+  // fingerprint, and never a security control on its own.
+  if (!request.cookies.get("device_id")) {
+    response.cookies.set("device_id", crypto.randomUUID(), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: !isDev,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
   return response;
 }
 

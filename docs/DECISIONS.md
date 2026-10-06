@@ -11,3 +11,17 @@
 - **Sign-in placeholder**: `/sign-in` is a "coming soon" page so the proxy redirect never 404s; Phase 1 replaces it.
 - **Images**: renamed to lowercase-hyphen names; unused originals moved to `design-assets/` (outside the web root). Social-media photos still need written clearance from the client.
 - **Test account**: the user supplied an owner email for local testing. The brief is passwordless, so no password is stored or used anywhere.
+
+## Phase 1
+- **Local database**: embedded-postgres (real Postgres, no Docker) via pnpm db:dev, data in .local/pg. Chosen over Docker (not installed), PGlite (needs an adapter) and a shared Neon branch. DB tests run only when TEST_DATABASE_URL is set.
+- **Migrations**: baseline (the 16 tables that existed) plus phase1_identity_content. On the existing Neon database run prisma migrate resolve --applied 20261006000000_baseline, then migrate deploy. Never against staging or production without asking.
+- **Roles**: user.role text, default reader (not null as the brief said); owner, support, editor, reader. Permissions live only in lib/permissions.ts; Better Auth admin plugin is owner only and impersonation is blocked by a hook.
+- **Passwordless**: emailAndPassword disabled; sign-up starts with email, then the phone is verified onto the signed-in account. No signUpOnVerification, so an unknown phone cannot sign in. requireUser sends incomplete accounts to /verify?step=complete.
+- **One session per account**: refused with SESSION_ALREADY_ACTIVE unless the person consented; consent is a 10 minute single-use flag keyed by email or phone. Race backstop: after a session is created, older sessions are deleted (newest survives). Google has no consent step yet.
+- **Codes**: 4 digits (one constant), 5 minute expiry, hashed, 5 tries per code, then the ladder in lib/auth/otp-ladder.ts (5x5 attempts with 5 minute cooldowns, 2 hour cooldown after 25 and 50, then a 5 hour lock). Counters in Upstash Redis (memory in development). Recommendation: 6 digits.
+- **Code delivery**: QStash (signed /api/qstash/send-otp), direct send when no token. Trade-off: the code passes through Upstash for up to 5 minutes.
+- **Cookie cache off** so bans and revocations apply immediately.
+- **Browser cache**: AES-GCM, split across localStorage and sessionStorage, display data only, never trusted by the server.
+- **Device id**: random httpOnly cookie from proxy.ts, stored on session.deviceId and user_device. Not a fingerprint.
+- **Turnstile** via the captcha plugin on the two send endpoints; Cloudflare test keys locally.
+- **Facebook** not built (needs a Meta app); Apple removed.

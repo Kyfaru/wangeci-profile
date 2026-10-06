@@ -19,4 +19,5 @@ Source of truth for scope: `docs/BUILD_BRIEF.md` (original) overridden by `docs/
 
 ## Phase status
 - Phase 0 (stabilise): done on `phase/0-stabilise`.
-- Phase 1 onward: see `docs/phase-reports/`.
+- Phase 1 (database + identity): done on `phase/1-database-identity`. Local DB: `pnpm db:dev`, `pnpm db:migrate`, `pnpm db:seed`; DB tests need TEST_DATABASE_URL.
+- Phase 2 onward: see `docs/phase-reports/`.

@@ -66,6 +66,19 @@ const envSchema = z.object({
   // (?token=...). Required in production.
   AT_WEBHOOK_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
 
+  // Cloudflare Turnstile (bot check on code requests). Required in production.
+  // Cloudflare publishes test keys that always pass for local development.
+  TURNSTILE_SECRET_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // Upstash QStash (queue that sends one-time codes). Optional locally: codes are then sent directly.
+  QSTASH_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  QSTASH_CURRENT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  QSTASH_NEXT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // Google sign-in. Optional until the OAuth client exists; the button hides without them.
+  GOOGLE_CLIENT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  GOOGLE_CLIENT_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
   // Sentry — optional until a later agent wires up error monitoring.
   // Empty-string env vars (common when a platform sets an unfilled
   // secret to "") are treated as "not set" rather than a validation
@@ -84,7 +97,15 @@ const envSchema = z.object({
 }).superRefine((value, ctx) => {
   // Fail fast at boot in production rather than on the first request that needs the value.
   if (value.NODE_ENV !== "production") return;
-  for (const key of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "AT_WEBHOOK_TOKEN"] as const) {
+  for (const key of [
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "AT_WEBHOOK_TOKEN",
+    "TURNSTILE_SECRET_KEY",
+    "QSTASH_TOKEN",
+    "QSTASH_CURRENT_SIGNING_KEY",
+    "QSTASH_NEXT_SIGNING_KEY",
+  ] as const) {
     if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required in production` });
   }
 });
