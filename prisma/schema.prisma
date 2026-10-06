@@ -70,17 +70,20 @@ model User {
 }
 
 model Session {
-  id             String   @id @default(cuid())
-  token          String   @unique
-  expiresAt      DateTime
-  ipAddress      String?
-  userAgent      String?
+  id                  String    @id @default(cuid())
+  token               String    @unique
+  expiresAt           DateTime
+  ipAddress           String?
+  userAgent           String?
   // Set by the admin plugin if impersonation is ever used (it stays disabled).
-  impersonatedBy String?
+  impersonatedBy      String?
   // The browser's server-issued device id (cookie), recorded when the session starts.
-  deviceId       String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  deviceId            String?
+  // Set when this session has passed the authenticator-app (two-step) check. For accounts with two-step
+  // on, a session where this is still empty gets nothing.
+  twoFactorVerifiedAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

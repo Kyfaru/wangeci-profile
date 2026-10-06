@@ -5,7 +5,8 @@ import Link from "next/link";
 import { formatPrice, listBooks } from "@/lib/catalogue";
 import { SITE } from "@/lib/site";
 
-export const revalidate = 300;
+// Rendered per request (not at build time): the build has no database, and the catalogue is small and cheap to read.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Store",

@@ -94,7 +94,11 @@ export function VerifyFlow({ complete, redirect, turnstileSiteKey }: { complete:
       setCode("");
       return setError(describeAuthError(res.error));
     }
-    if ((res.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) return setTwoFactor(true);
+    // Better Auth only runs its own two-step prompt for password sign-ins, so we check the new session ourselves:
+    // an account with two-step on gets a session that stays locked until the authenticator code is entered.
+    const { data: fresh } = await authClient.getSession();
+    const pending = fresh?.user && (fresh.user as { twoFactorEnabled?: boolean }).twoFactorEnabled && !(fresh.session as { twoFactorVerifiedAt?: unknown }).twoFactorVerifiedAt;
+    if (pending) return setTwoFactor(true);
     await afterSignedIn(flow);
   }
 

@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 
 import { VerifyFlowClient } from "@/components/auth/VerifyFlowClient";
 import { safeRedirect } from "@/lib/auth/safe-redirect";
-import { getSession } from "@/lib/server/session";
+import { TwoFactorStep } from "@/components/auth/TwoFactorStep";
+import { getSession, hasPendingTwoFactor } from "@/lib/server/session";
 
 export const metadata: Metadata = { title: "Verify", alternates: { canonical: "/verify" } };
 export const dynamic = "force-dynamic";
@@ -15,7 +16,14 @@ export const dynamic = "force-dynamic";
 export default async function VerifyPage({ searchParams }: PageProps<"/verify">) {
   const sp = await searchParams;
   const complete = sp.step === "complete";
+  const twoStep = sp.step === "2fa";
   const redirectTo = safeRedirect(typeof sp.redirect === "string" ? sp.redirect : null);
+
+  if (twoStep) {
+    // Only someone who is signed in but owes the authenticator code belongs here.
+    if (!(await hasPendingTwoFactor())) redirect("/sign-in");
+    return <TwoFactorStep redirect={redirectTo} />;
+  }
 
   if (complete) {
     const session = await getSession();

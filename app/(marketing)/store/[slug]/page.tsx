@@ -6,7 +6,8 @@ import { getBookBySlug, getFreePreview } from "@/lib/catalogue";
 import { jsonLd } from "@/lib/json-ld";
 import { SITE } from "@/lib/site";
 
-export const revalidate = 300; // catalogue changes rarely; refresh at most every 5 minutes
+// Rendered per request (not at build time): the build has no database, and the catalogue is small and cheap to read.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PageProps<"/store/[slug]">): Promise<Metadata> {
   const book = await getBookBySlug((await params).slug);

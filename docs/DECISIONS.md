@@ -54,3 +54,12 @@
 - **Listening page layout** follows the reader frame, with a music-style player bar in place of "Page X of Y" (your request).
 - **Dev audio**: bucket "local" assets are served from /public only outside production; /public/dev-audio is git-ignored (it holds your Dedication.mp3).
 - **Settings 2FA** uses the Better Auth twoFactor plugin in passwordless mode with QR and backup codes; admin enforcement comes in Phase 5.
+
+## Phase 5
+- **Two-step is tracked per session** (session.twoFactorVerifiedAt). Better Auth only enforces it for password sign-ins, so email-code, phone-code and Google sign-ins would have skipped it. A locked session counts as signed out until the authenticator code is entered. Setting up two-step re-issues the same person session, so it is a renewal, not a second device.
+- **Admin gate** = role (lib/permissions.ts) + two-step on + session under 8 hours. Anything else is a 404 for people who may not be there. No 30 minute idle timeout (Better Auth does not track idle time).
+- **Writes and audit in one transaction** (lib/admin/actions.ts). Typed reason of at least 10 characters for refunds, complimentary access, bans, role changes and retiring an edition.
+- **Refund never sets REFUNDED itself** for cards; M-Pesa uses an owner-recorded manual refund with a reference.
+- **Stats cache** in the shared key-value store, 30 to 300 seconds by range length. Revenue counts only PAID orders; refunded orders and complimentary access are excluded.
+- **Editions upload page is replaced by scripts/publish-edition.ts** (agreed cut); /admin/content publishes and retires only.
+- **Local DB pinned**: .env.development.local overrides the database URLs so development and tests never touch a shared database when .env.local points at Neon.

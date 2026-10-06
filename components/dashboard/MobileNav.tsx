@@ -1,12 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-
-import { Sidebar } from "@/components/dashboard/Sidebar";
+import { useEffect, useState, type ReactNode } from "react";
 
 /** Phones and small tablets: a slim top bar with a menu button that opens the sidebar as a drawer. */
-export function MobileNav({ user }: { user: { name: string } }) {
+export function MobileNav({ children, title = "Wangeci" }: { children: ReactNode; title?: string }) {
   const pathname = usePathname();
   const [openAt, setOpenAt] = useState<string | null>(null);
   const open = openAt === pathname; // navigating to another page closes the drawer by itself
@@ -26,14 +24,14 @@ export function MobileNav({ user }: { user: { name: string } }) {
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
         </button>
-        <span className="font-display text-lg text-navy">Wangeci</span>
+        <span className="font-display text-lg text-navy">{title}</span>
       </div>
 
       {open && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Menu">
           <button type="button" aria-label="Close menu" onClick={() => setOpenAt(null)} className="absolute inset-0 bg-navy/60" />
           <div className="relative h-full w-[min(347px,85vw)]">
-            <Sidebar user={user} />
+            {children}
           </div>
         </div>
       )}

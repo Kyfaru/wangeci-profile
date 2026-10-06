@@ -20,7 +20,9 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
         <Sidebar user={user} />
       </div>
       <div className="min-w-0 flex-1">
-        <MobileNav user={user} />
+        <MobileNav>
+          <Sidebar user={user} />
+        </MobileNav>
         {children}
       </div>
       {/* One audio element for the whole dashboard, so listening continues while browsing. */}

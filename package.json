@@ -14,7 +14,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "db:seed": "node --env-file=.env.local prisma/seed.ts",
+    "db:seed": "node --env-file=.env.local --env-file=.env.development.local prisma/seed.ts",
     "db:dev": "node scripts/dev-db.mjs",
     "db:migrate": "prisma migrate deploy"
   },

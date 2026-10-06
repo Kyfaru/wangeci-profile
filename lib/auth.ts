@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { admin, captcha, emailOTP, phoneNumber, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
@@ -29,6 +29,7 @@ const TRUSTED_ORIGINS = [
 const SEND_PATHS = ["/email-otp/send-verification-otp", "/phone-number/send-otp"];
 const VERIFY_PATHS = ["/sign-in/email-otp", "/email-otp/verify-email", "/phone-number/verify"];
 const CAPTCHA_PATHS = SEND_PATHS;
+const TWO_FACTOR_VERIFY_PATHS = ["/two-factor/verify-totp", "/two-factor/verify-backup-code", "/two-factor/verify-otp"];
 
 const ladder = createLadder();
 
@@ -90,6 +91,11 @@ export const auth = betterAuth({
     // Off on purpose: a ban, a revoked session or a replaced device must take effect on the very
     // next request, not up to 5 minutes later.
     cookieCache: { enabled: false },
+    // Our own columns on the session row, so Better Auth reads and writes them.
+    additionalFields: {
+      deviceId: { type: "string", required: false, input: false },
+      twoFactorVerifiedAt: { type: "date", required: false, input: false },
+    },
   },
 
   secret: env.BETTER_AUTH_SECRET,
@@ -133,6 +139,18 @@ export const auth = betterAuth({
 
     // Runs after: a wrong code moves the ladder forward, a right one clears it.
     after: createAuthMiddleware(async (ctx) => {
+      // A correct authenticator code (or backup code) marks THIS session as having passed the two-step check.
+      if (TWO_FACTOR_VERIFY_PATHS.includes(ctx.path)) {
+        if (ctx.context.returned instanceof Error) return;
+        const current = await getSessionFromCtx(ctx).catch(() => null);
+        if (current) {
+          // updateMany: when two-step was just switched on, the old session was replaced (and already marked), so there may be nothing to update.
+          await prisma.session.updateMany({ where: { id: current.session.id }, data: { twoFactorVerifiedAt: new Date() } });
+          await logActivity({ userId: current.user.id, type: "two_factor.verified" });
+        }
+        return;
+      }
+
       if (!VERIFY_PATHS.includes(ctx.path)) return;
       const id = identifierFrom(ctx.body);
       if (!id) return;
@@ -161,10 +179,13 @@ export const auth = betterAuth({
         before: async (session, ctx) => {
           const user = await prisma.user.findUnique({
             where: { id: session.userId },
-            select: { id: true, email: true, phoneNumber: true },
+            select: { id: true, email: true, phoneNumber: true, twoFactorEnabled: true },
           });
+          // Setting up or confirming two-step re-issues the person's OWN session (they are already signed in
+          // and have just proved the code), so it is a replacement, never a second device.
+          const sameSessionRenewal = Boolean(ctx?.path?.startsWith("/two-factor/"));
           if (user) {
-            const decision = await decideNewSession(user);
+            const decision = sameSessionRenewal ? "replace" : await decideNewSession(user);
             if (decision === "block") {
               await logActivity({ userId: user.id, type: "login.blocked", metadata: { reason: "session_already_active" } });
               throw new APIError("FORBIDDEN", {
@@ -178,7 +199,10 @@ export const auth = betterAuth({
             }
           }
           const deviceId = readCookie(ctx?.headers, "device_id");
-          return { data: { ...session, deviceId } };
+          // Accounts with two-step on start every NEW session unverified: nothing opens until the
+          // authenticator code is entered (Better Auth only does this for password sign-ins, not for codes or Google).
+          const verified = !user?.twoFactorEnabled || sameSessionRenewal;
+          return { data: { ...session, deviceId, twoFactorVerifiedAt: verified ? new Date() : null } };
         },
         after: async (session) => {
           // Race backstop: if two sign-ins slipped through at once, the newest session survives.
