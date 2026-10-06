@@ -12,7 +12,7 @@ jobs:
       DATABASE_URL: postgresql://user:pass@localhost:5432/ci
       DIRECT_URL: postgresql://user:pass@localhost:5432/ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4 # version comes from "packageManager" in package.json
       - uses: actions/setup-node@v4
         with:
