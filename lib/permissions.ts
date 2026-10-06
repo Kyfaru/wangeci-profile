@@ -25,6 +25,7 @@ export const ACTIONS = [
   "access.revoke",
   "customer.ban",
   "content.manage",
+  "coupon.manage",
   "roles.manage",
   "audit.read",
 ] as const;

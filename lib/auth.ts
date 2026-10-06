@@ -6,6 +6,7 @@ import { admin, captcha, emailOTP, phoneNumber, twoFactor } from "better-auth/pl
 import { createAccessControl } from "better-auth/plugins/access";
 import { adminAc, defaultStatements } from "better-auth/plugins/admin/access";
 
+import { checkoutClaim } from "@/lib/auth/checkout-claim-plugin";
 import { OTP_ATTEMPTS_PER_CODE, OTP_LENGTH, OTP_TTL_SECONDS } from "@/lib/auth/constants";
 import { createLadder } from "@/lib/auth/otp-ladder";
 import { decideNewSession, revokeOtherSessions } from "@/lib/auth/session-policy";
@@ -260,6 +261,7 @@ export const auth = betterAuth({
     }),
     // allowPasswordless: the default 2FA setup asks for a password, and we have none.
     twoFactor({ issuer: "Wangeci", allowPasswordless: true }),
+    checkoutClaim(),
     admin({ ac, roles, defaultRole: "reader", adminRoles: ["owner"] }),
     // Must be last so it can apply Better Auth's Set-Cookie headers through next/headers.
     nextCookies(),

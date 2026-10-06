@@ -17,7 +17,8 @@ export async function grantOrderEntitlements(orderId: string, tx: Prisma.Transac
 }
 
 export interface PaidDetails {
-  provider: "PAYSTACK" | "MPESA";
+  /** Absent for a free order (a 100% coupon): no provider was involved. */
+  provider?: "PAYSTACK" | "MPESA";
   receipt?: string;
   payerPhone?: string;
 }
@@ -36,5 +37,11 @@ export async function markOrderPaid(orderId: string, details: PaidDetails, tx: P
   });
   if (count === 0) return false;
   await grantOrderEntitlements(orderId, tx);
+
+  // Sequential invoice number (INV-2026-000123), taken from a database sequence inside the same transaction.
+  const [{ n }] = await tx.$queryRaw<{ n: bigint }[]>`SELECT nextval('invoice_number_seq') AS n`;
+  const invoiceNumber = `INV-${new Date().getFullYear()}-${String(n).padStart(6, "0")}`;
+  const order = await tx.order.update({ where: { id: orderId }, data: { invoiceNumber }, select: { couponId: true } });
+  if (order.couponId) await tx.coupon.update({ where: { id: order.couponId }, data: { timesRedeemed: { increment: 1 } } });
   return true;
 }

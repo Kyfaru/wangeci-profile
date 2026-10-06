@@ -168,6 +168,33 @@ export async function setRole(input: { userId: string; role: (typeof ASSIGNABLE_
   return { ok: true };
 }
 
+/** Create a discount code. Codes are stored upper-case; a percent is 1 to 100. */
+export async function createCoupon(input: { actor: Actor; reason: string; code: string; type: "PERCENT" | "FIXED"; value: number; minSubtotal?: number | null; maxRedemptions?: number | null; endsAt?: Date | null }): Promise<{ ok: true }> {
+  const reason = reasonOrThrow(input.reason);
+  const code = input.code.trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{3,30}$/.test(code)) throw new AdminError("A code is 3 to 30 letters, numbers, - or _.");
+  if (!(input.value > 0)) throw new AdminError("The value must be more than zero.");
+  if (input.type === "PERCENT" && input.value > 100) throw new AdminError("A percentage cannot be more than 100.");
+  await prisma.$transaction(async (tx) => {
+    if (await tx.coupon.findUnique({ where: { code } })) throw new AdminError("That code already exists.");
+    const row = await tx.coupon.create({ data: { code, type: input.type, value: input.value.toFixed(2), minSubtotal: input.minSubtotal ?? null, maxRedemptions: input.maxRedemptions ?? null, endsAt: input.endsAt ?? null } });
+    await recordAudit({ adminId: input.actor.id, action: "coupon.created", targetType: "coupon", targetId: row.id, meta: { reason, code, type: input.type, value: input.value }, ip: input.actor.ip }, tx);
+  });
+  return { ok: true };
+}
+
+/** Switch a code on or off. Used codes stay on their orders either way. */
+export async function setCouponActive(input: { couponId: string; active: boolean; actor: Actor; reason: string }): Promise<{ ok: true }> {
+  const reason = reasonOrThrow(input.reason);
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.coupon.findUnique({ where: { id: input.couponId } });
+    if (!row) throw new AdminError("Coupon not found.");
+    await tx.coupon.update({ where: { id: row.id }, data: { isActive: input.active } });
+    await recordAudit({ adminId: input.actor.id, action: input.active ? "coupon.enabled" : "coupon.disabled", targetType: "coupon", targetId: row.id, meta: { reason, code: row.code }, ip: input.actor.ip }, tx);
+  });
+  return { ok: true };
+}
+
 /** Publish or retire an edition. Retiring never deletes: orders and owners keep their access. */
 export async function setEditionActive(input: { editionId: string; active: boolean; actor: Actor; reason: string }): Promise<{ ok: true }> {
   const reason = reasonOrThrow(input.reason);

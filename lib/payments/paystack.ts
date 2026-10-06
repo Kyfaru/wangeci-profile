@@ -35,7 +35,7 @@ export const paystack: PaymentProvider = {
   id: "PAYSTACK",
 
   async initialize({ orderId, reference, amount, currency, buyer, returnUrl }) {
-    const data = await call<{ authorization_url: string; reference: string }>("/transaction/initialize", {
+    const data = await call<{ authorization_url: string; access_code: string; reference: string }>("/transaction/initialize", {
       method: "POST",
       body: JSON.stringify({
         email: buyer.email,
@@ -46,7 +46,7 @@ export const paystack: PaymentProvider = {
         metadata: { orderId },
       }),
     });
-    return { reference: data.reference ?? reference, redirectUrl: data.authorization_url };
+    return { reference: data.reference ?? reference, redirectUrl: data.authorization_url, accessCode: data.access_code };
   },
 
   verifyWebhook(rawBody, headers) {

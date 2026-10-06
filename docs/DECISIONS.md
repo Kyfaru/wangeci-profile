@@ -63,3 +63,11 @@
 - **Stats cache** in the shared key-value store, 30 to 300 seconds by range length. Revenue counts only PAID orders; refunded orders and complimentary access are excluded.
 - **Editions upload page is replaced by scripts/publish-edition.ts** (agreed cut); /admin/content publishes and retires only.
 - **Local DB pinned**: .env.development.local overrides the database URLs so development and tests never touch a shared database when .env.local points at Neon.
+
+## Phase 6
+- **A guest never gets a session at checkout.** A new account claims exactly one session after the server confirms payment, with a hashed one-time secret only the paying browser holds (Better Auth plugin endpoint `/checkout/claim`). An existing account is never signed in this way.
+- **Unverified accounts are allowed to use the dashboard.** Verification happens at the first code sign-in. A stranger who types someone's phone at checkout can only attach purchases to a new unverified account; a phone owned by another account is refused.
+- **Retry ladder** 5 tries then 5/5/10/20/40/60 minutes then 24 hours, per email and per IP, in the shared key-value store.
+- **Coupon use** is counted when the order is PAID (`timesRedeemed`), plus orders waiting in the last 30 minutes, so a code cannot be used past its limit in parallel by much.
+- **Receipt and invoice are one PDF** attached to the success email and downloadable from the thank-you page (owner or paying device only).
+- **Orphan accounts**: a guest who never pays leaves an unverified account with no purchases. A cleanup of those is not built yet.

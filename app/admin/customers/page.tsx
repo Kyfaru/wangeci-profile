@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Customers" };
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
-type Row = { id: string; name: string; email: string; role: string; verified: string; owned: number; banned: boolean; joined: string };
+type Row = { id: string; name: string; email: string; role: string; verified: string; owned: number; banned: boolean; fromCheckout: boolean; joined: string };
 
 export default async function CustomersPage({ searchParams }: PageProps<"/admin/customers">) {
   await requireRole("customers.read");
@@ -20,16 +20,16 @@ export default async function CustomersPage({ searchParams }: PageProps<"/admin/
   const where = q ? { OR: [{ email: { contains: q, mode: "insensitive" as const } }, { name: { contains: q, mode: "insensitive" as const } }, { phoneNumber: { contains: q } }] } : {};
   const [total, users] = await Promise.all([
     prisma.user.count({ where }),
-    prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE, include: { _count: { select: { entitlements: true } } } }),
+    prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE, include: { _count: { select: { entitlements: true } }, orders: { where: { accountCreated: true }, select: { id: true }, take: 1 } } }),
   ]);
-  const rows: Row[] = users.map((u) => ({ id: u.id, name: u.name || "(no name)", email: u.email, role: u.role, verified: `${u.emailVerified ? "email" : ""}${u.emailVerified && u.phoneNumberVerified ? " + " : ""}${u.phoneNumberVerified ? "phone" : ""}` || "none", owned: u._count.entitlements, banned: u.banned, joined: u.createdAt.toISOString().slice(0, 10) }));
+  const rows: Row[] = users.map((u) => ({ id: u.id, name: u.name || "(no name)", email: u.email, role: u.role, verified: `${u.emailVerified ? "email" : ""}${u.emailVerified && u.phoneNumberVerified ? " + " : ""}${u.phoneNumberVerified ? "phone" : ""}` || "none", owned: u._count.entitlements, banned: u.banned, fromCheckout: u.orders.length > 0, joined: u.createdAt.toISOString().slice(0, 10) }));
 
   const columns: Column<Row>[] = [
     { key: "name", label: "Customer", render: (r) => (<><Link href={`/admin/customers/${r.id}`} className="font-medium hover:underline">{r.name}</Link><span className="block text-xs text-black/50">{r.email}</span></>) },
     { key: "role", label: "Role", render: (r) => r.role },
     { key: "verified", label: "Verified", render: (r) => r.verified },
     { key: "owned", label: "Books", render: (r) => r.owned, className: "tabular-nums" },
-    { key: "status", label: "Status", render: (r) => (r.banned ? <span className="text-error">banned</span> : "ok") },
+    { key: "status", label: "Status", render: (r) => (r.banned ? <span className="text-error">banned</span> : <>active{r.fromCheckout && <span className="block text-xs text-black/50">created at checkout</span>}</>) },
     { key: "joined", label: "Joined", render: (r) => r.joined },
   ];
 

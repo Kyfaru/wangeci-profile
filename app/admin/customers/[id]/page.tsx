@@ -47,6 +47,7 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
         <dl className="grid gap-2 text-sm sm:grid-cols-[150px_1fr]">
           <dt className="text-black/60">Email</dt><dd>{user.email} {user.emailVerified ? "(verified)" : "(not verified)"}</dd>
           <dt className="text-black/60">Phone</dt><dd>{user.phoneNumber ?? "none"} {user.phoneNumberVerified ? "(verified)" : ""}</dd>
+          <dt className="text-black/60">Account</dt><dd>{user.banned ? "banned" : "active"}{user.orders.some((o) => o.accountCreated) ? " (created automatically at checkout)" : ""}</dd>
           <dt className="text-black/60">Role</dt><dd>{user.role}</dd>
           <dt className="text-black/60">Joined</dt><dd>{when(user.createdAt)}</dd>
           <dt className="text-black/60">Last seen</dt><dd>{user.lastSeenAt ? when(user.lastSeenAt) : "never"}</dd>

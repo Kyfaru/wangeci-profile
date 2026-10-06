@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 
 import { markOrderPaid } from "@/lib/orders/grant";
+import { afterOrderPaid } from "@/lib/orders/post-paid";
 import { getProvider } from "@/lib/payments";
 import type { ProviderEvent, ProviderId } from "@/lib/payments/types";
 import { prisma } from "@/lib/prisma";
@@ -15,8 +16,6 @@ export type ApplyResult =
   | "failed" // the payment failed; order marked FAILED
   | "refunded" // refund completed; access removed
   | "refund_failed";
-
-const money = (n: number, c: string) => `${c} ${n.toLocaleString("en-KE")}`;
 
 /**
  * Applies ONE normalised provider event. Webhooks, the checkout status fallback and the cron sweep all
@@ -68,12 +67,8 @@ async function onPaymentSucceeded(event: Extract<ProviderEvent, { type: "payment
   const granted = await prisma.$transaction((tx) => markOrderPaid(order.id, { provider: event.provider, receipt: event.receipt, payerPhone: event.payerPhone }, tx));
   if (!granted) return "noop";
 
-  // 4. After the commit: receipts and admin alerts. Failures here must never undo or fail the payment.
-  const titles = order.items.map((i) => i.edition.title ?? i.edition.work.title);
-  await Promise.allSettled([
-    notify(order.userId, { type: "order_paid", orderId: order.id, titles, total: money(Number(order.totalAmount), order.currency), reference: event.reference }, ["email", "sms", "in_app"]),
-    notifyAdmins({ type: "order_paid", title: "New paid order", body: `${titles.join(", ")} for ${money(Number(order.totalAmount), order.currency)}`, link: `/admin/sales/${order.id}`, dedupeKey: `order-paid:${order.id}` }),
-  ]);
+  // 4. After the commit: invoice, email, SMS and admin alerts. Failures here must never undo or fail the payment.
+  await afterOrderPaid(order.id).catch((error) => console.error("[orders] post-payment steps failed", error));
   return "granted";
 }
 

@@ -19,7 +19,7 @@ export default async function OrderPage({ params }: PageProps<"/admin/sales/[id]
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { user: { select: { id: true, name: true, email: true, phoneNumber: true } }, items: { include: { edition: { include: { work: { select: { title: true } } } } } } },
+    include: { coupon: { select: { code: true } }, user: { select: { id: true, name: true, email: true, phoneNumber: true } }, items: { include: { edition: { include: { work: { select: { title: true } } } } } } },
   });
   if (!order) notFound();
   const history = await prisma.auditLog.findMany({ where: { targetType: "order", targetId: order.id }, orderBy: { createdAt: "desc" }, include: { admin: { select: { name: true } } } });
@@ -36,8 +36,12 @@ export default async function OrderPage({ params }: PageProps<"/admin/sales/[id]
       <section className={card}>
         <dl className="grid gap-2 text-sm sm:grid-cols-[150px_1fr]">
           <dt className="text-black/60">Status</dt><dd className="font-medium">{order.status}{order.refundRequestedAt && order.status === "PAID" ? " (refund pending)" : ""}</dd>
-          <dt className="text-black/60">Total</dt><dd>{money(order.totalAmount, order.currency)}</dd>
-          <dt className="text-black/60">Buyer</dt><dd><Link href={`/admin/customers/${order.user.id}`} className="underline">{order.user.name || order.user.email}</Link> ({order.user.email})</dd>
+          <dt className="text-black/60">Subtotal</dt><dd>{money(Number(order.subtotalAmount) || Number(order.totalAmount), order.currency)}</dd>
+          <dt className="text-black/60">Discount</dt><dd>{Number(order.discountAmount) > 0 ? `- ${money(order.discountAmount, order.currency)}${order.coupon ? ` (coupon ${order.coupon.code})` : ""}` : "none"}</dd>
+          <dt className="text-black/60">Fees</dt><dd>{money(order.feeAmount, order.currency)}</dd>
+          <dt className="text-black/60">Total paid</dt><dd className="font-medium">{money(order.totalAmount, order.currency)}</dd>
+          {order.invoiceNumber && (<><dt className="text-black/60">Invoice</dt><dd>{order.invoiceNumber}</dd></>)}
+          <dt className="text-black/60">Buyer</dt><dd><Link href={`/admin/customers/${order.user.id}`} className="underline">{order.user.name || order.user.email}</Link> ({order.user.email}){order.user.phoneNumber ? `, ${order.user.phoneNumber}` : ""}{order.accountCreated ? " · account created at checkout" : ""}</dd>
           <dt className="text-black/60">Paid with</dt><dd>{order.provider ?? "none yet"}{order.mpesaReceipt ? `, M-Pesa receipt ${order.mpesaReceipt}` : ""}</dd>
           <dt className="text-black/60">Reference</dt><dd className="break-all">{order.providerReference ?? "none"}</dd>
           <dt className="text-black/60">Created</dt><dd>{when(order.createdAt)}</dd>

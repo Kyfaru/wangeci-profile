@@ -6,7 +6,7 @@ import { getSessionCookie } from "better-auth/cookies";
 // Route prefixes that require a signed-in session. This is only the fast front
 // door (cookie present, no database lookup): every protected page, route
 // handler and server action must re-check the real session on the server.
-const PROTECTED_PREFIXES = ["/dashboard", "/checkout", "/account", "/admin"];
+const PROTECTED_PREFIXES = ["/dashboard", "/account", "/admin"];
 
 const isDev = process.env.NODE_ENV === "development";
 

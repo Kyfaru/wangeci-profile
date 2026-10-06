@@ -3,18 +3,22 @@ import type { Metadata } from "next";
 import { CheckoutClient } from "@/components/checkout/CheckoutClient";
 import { enabledProviders } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/server/session";
+import { getSession } from "@/lib/server/session";
 
 export const metadata: Metadata = { title: "Checkout", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
-/** `/checkout`: signed-in, verified buyers only (the proxy is the front door, requireUser is the real check). */
+/** `/checkout`: open to guests (an account is created from their details) and to signed-in readers. */
 export default async function CheckoutPage() {
-  const user = await requireUser();
-  const [saved, fullUser] = await Promise.all([
-    prisma.cartItem.findMany({ where: { cart: { userId: user.id } }, select: { editionId: true } }),
-    prisma.user.findUnique({ where: { id: user.id }, select: { phoneNumber: true } }),
-  ]);
+  const session = await getSession();
+  const saved = session ? await prisma.cartItem.findMany({ where: { cart: { userId: session.user.id } }, select: { editionId: true } }) : [];
 
-  return <CheckoutClient savedEditionIds={saved.map((s) => s.editionId)} accountPhone={fullUser?.phoneNumber ?? null} methods={enabledProviders()} />;
+  return (
+    <CheckoutClient
+      savedEditionIds={saved.map((s) => s.editionId)}
+      signedIn={session ? { name: session.user.name, email: session.user.email, phone: session.user.phoneNumber ?? null } : null}
+      methods={enabledProviders()}
+      turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+    />
+  );
 }

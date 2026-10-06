@@ -319,6 +319,18 @@ model Order {
   // Set when an admin asks the provider for a refund. The order only becomes REFUNDED when the
   // signed refund event arrives; this lets the UI show "refund pending" without a new status.
   refundRequestedAt   DateTime?
+  // totalAmount (above) is what the buyer PAYS: subtotal - discount + fees. The parts are kept so the
+  // receipt, the invoice and the admin can show how the total was made.
+  subtotalAmount      Decimal          @default(0) @db.Decimal(10, 2)
+  discountAmount      Decimal          @default(0) @db.Decimal(10, 2)
+  feeAmount           Decimal          @default(0) @db.Decimal(10, 2)
+  // Sequential invoice number, given when the order is paid (INV-2026-000123).
+  invoiceNumber       String?          @unique
+  // Guest checkout: true when this order created the buyer's account. The device that paid may claim
+  // one session for that account, once, using a secret only that device holds (stored hashed).
+  accountCreated      Boolean          @default(false)
+  claimTokenHash      String?
+  claimedAt           DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -327,6 +339,9 @@ model Order {
   // later deleted. Account deletion flows must handle this explicitly.
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  couponId String?
+  coupon   Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
 
   items        OrderItem[]
   entitlements Entitlement[]
@@ -654,4 +669,37 @@ model AuditLog {
   @@index([adminId, createdAt])
   @@index([targetType, targetId])
   @@map("audit_log")
+}
+
+// ---------------------------------------------------------------------------
+// 9. Coupons
+// ---------------------------------------------------------------------------
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+// A discount code. The server validates and applies it; the browser only sends the code text.
+model Coupon {
+  id             String     @id @default(cuid())
+  // Stored upper-case; matched case-insensitively.
+  code           String     @unique
+  description    String?
+  type           CouponType
+  // PERCENT: 1 to 100. FIXED: an amount in KES.
+  value          Decimal    @db.Decimal(10, 2)
+  minSubtotal    Decimal?   @db.Decimal(10, 2)
+  maxRedemptions Int?
+  // Counted when an order is PAID (pending orders in the last 30 minutes are counted too, when checking).
+  timesRedeemed  Int        @default(0)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  orders Order[]
+
+  @@map("coupon")
 }

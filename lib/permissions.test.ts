@@ -9,7 +9,7 @@ describe("can()", () => {
   it("support reads and moderates but cannot refund, grant, ban or manage roles", () => {
     expect(can("support", "sales.read")).toBe(true);
     expect(can("support", "comments.moderate")).toBe(true);
-    for (const a of ["order.refund", "access.grant", "access.revoke", "customer.ban", "roles.manage", "audit.read", "content.manage"] as const) {
+    for (const a of ["order.refund", "access.grant", "access.revoke", "customer.ban", "roles.manage", "audit.read", "content.manage", "coupon.manage"] as const) {
       expect(can("support", a)).toBe(false);
     }
   });

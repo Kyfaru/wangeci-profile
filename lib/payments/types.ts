@@ -23,6 +23,8 @@ export interface InitializeResult {
   reference: string;
   /** Card flows: send the browser here to pay. */
   redirectUrl?: string;
+  /** Card flows: lets the Paystack popup (inline JS) resume this transaction in the page. */
+  accessCode?: string;
   /** M-Pesa flow: extra ids to store on the order. */
   merchantRequestId?: string;
 }

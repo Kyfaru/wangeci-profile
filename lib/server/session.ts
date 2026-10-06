@@ -62,16 +62,13 @@ export async function getSessionUserId(): Promise<string | null> {
 
 /**
  * For pages, layouts and server actions: returns the user, or redirects to sign-in.
- * A reader must also have verified both email and phone (see /verify); anyone who has not is sent
- * there to finish. Pass { allowIncomplete: true } on the verify pages themselves.
+ * Accounts made at checkout start unverified (the payment proves the buyer, and the first code
+ * sign-in verifies the email or phone), so being unverified does not block the dashboard.
  */
-export async function requireUser(options: { allowIncomplete?: boolean } = {}) {
+export async function requireUser() {
   const session = await getSession();
   if (!session) redirect((await hasPendingTwoFactor()) ? "/verify?step=2fa" : "/sign-in");
-  const { user } = session;
-  const incomplete = !user.emailVerified || !user.phoneNumberVerified;
-  if (incomplete && !options.allowIncomplete) redirect("/verify?step=complete");
-  return user;
+  return session.user;
 }
 
 /** Admin sessions are short: after this long since sign-in, the person must sign in again. */

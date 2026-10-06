@@ -87,6 +87,9 @@ const envSchema = z.object({
   // (/api/webhooks/mpesa/<token>). Anything else is a 404.
   DARAJA_CALLBACK_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
 
+  // Processing fee added at checkout, as a percentage of the amount after discount. 0 (default) = no fee.
+  CHECKOUT_FEE_PERCENT: z.preprocess((v) => (v === "" || v === undefined ? 0 : v), z.coerce.number().min(0).max(20)),
+
   // Shared secret for scheduled jobs (sent as "Authorization: Bearer <secret>").
   CRON_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
 

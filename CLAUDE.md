@@ -24,4 +24,4 @@ Source of truth for scope: `docs/BUILD_BRIEF.md` (original) overridden by `docs/
 - Phase 3 (money path): done on `phase/3-money-path`. Payment news always goes through `applyProviderEvent`; Daraja is unverified against official docs.
 - Phase 4 (library, reader, listening): done on `phase/4-library-reader-listening`. Read-along timing is estimated.
 - Phase 5 (admin core): done on `phase/5-admin-core`. `.env.development.local` pins dev to the local database.
-- Next: guest checkout and receipts, then launch hardening.
+- Phase 6 (guest checkout, coupons, invoices): done on `phase/6-guest-checkout`. Next: launch hardening.

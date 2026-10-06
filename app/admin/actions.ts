@@ -7,11 +7,13 @@ import { z } from "zod";
 import {
   AdminError,
   ASSIGNABLE_ROLES,
+  createCoupon,
   grantComplimentaryAccess,
   recordManualRefund,
   requestRefund,
   revokeComplimentaryAccess,
   setBan,
+  setCouponActive,
   setEditionActive,
   setRole,
   type Actor,
@@ -45,6 +47,31 @@ async function run(permission: Action, change: (actor: Actor) => Promise<string>
 }
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? "");
+const num = (form: FormData, key: string) => (text(form, key).trim() === "" ? null : Number(text(form, key)));
+
+export async function createCouponAction(_prev: ActionResult | null, form: FormData) {
+  return run("coupon.manage", async (actor) => {
+    const ends = text(form, "endsAt");
+    await createCoupon({
+      actor,
+      reason: text(form, "reason"),
+      code: text(form, "code"),
+      type: text(form, "type") === "FIXED" ? "FIXED" : "PERCENT",
+      value: Number(text(form, "value")),
+      minSubtotal: num(form, "minSubtotal"),
+      maxRedemptions: num(form, "maxRedemptions"),
+      endsAt: ends ? new Date(`${ends}T23:59:59Z`) : null,
+    });
+    return "Coupon created.";
+  });
+}
+
+export async function setCouponActiveAction(_prev: ActionResult | null, form: FormData) {
+  return run("coupon.manage", async (actor) => {
+    await setCouponActive({ couponId: text(form, "couponId"), active: text(form, "active") === "true", actor, reason: text(form, "reason") });
+    return "Coupon updated.";
+  });
+}
 
 export async function refundOrderAction(_prev: ActionResult | null, form: FormData) {
   return run("order.refund", async (actor) => {
