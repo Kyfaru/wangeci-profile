@@ -54,6 +54,7 @@ chapters.forEach((c, i) => {
     if (!fs.readFileSync(abs(c.file!), "utf8").trim()) fail(`chapter ${i + 1}: text file is empty`);
   } else {
     if (!c.audio || !fs.existsSync(abs(c.audio))) fail(`chapter ${i + 1}: audio file not found (${c.audio})`);
+    if (c.file && !fs.existsSync(abs(c.file))) fail(`chapter ${i + 1}: text file not found (${c.file})`); // optional read-along text
     if (!/\.(mp3|m4a)$/i.test(c.audio!)) fail(`chapter ${i + 1}: audio must be .mp3 or .m4a`);
     if (!(c.durationSeconds && c.durationSeconds > 0)) fail(`chapter ${i + 1}: durationSeconds is required`);
     // Optional check: the files should be 192-320 kbps. Needs ffprobe on the PATH; skipped if missing.
@@ -123,6 +124,11 @@ async function main() {
       body = fs.readFileSync(abs(c.file!), "utf8").replace(/\r\n/g, "\n").trim();
       wordCount = body.split(/\s+/).length;
     } else {
+      // Optional text for the read-along view (shown while the narrator speaks).
+      if (c.file) {
+        body = fs.readFileSync(abs(c.file), "utf8").replace(/\r\n/g, "\n").trim();
+        wordCount = body.split(/\s+/).length;
+      }
       const ext = path.extname(c.audio!).toLowerCase();
       const key = `editions/${e.id}/audio/${String(idx).padStart(3, "0")}${ext}`;
       await put(process.env.R2_BUCKET_PROTECTED!, key, abs(c.audio!)); // protected bucket: never public

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+
 import { BreadcrumbBar } from "@/components/dashboard/BreadcrumbBar";
+import { ChapterReaderClient } from "@/components/dashboard/ChapterReaderClient";
 import { ReaderActions } from "@/components/dashboard/ReaderActions";
-import { ReaderPager } from "@/components/dashboard/ReaderPager";
 import { ReaderProgressSync } from "@/components/dashboard/ReaderProgressSync";
 import { ReaderRail } from "@/components/dashboard/ReaderRail";
 import { getBookBySlug } from "@/lib/catalogue";
 import { prisma } from "@/lib/prisma";
+import { parseLocator } from "@/lib/reading/locator";
 import { requireUser } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +19,9 @@ export async function generateMetadata({ params }: PageProps<"/dashboard/books/[
 }
 
 /**
- * `/dashboard/books/[slug]/read`: Figma "The Book" frame. Phase 4 rebuilds the reading experience
- * (device-sized pages, saved position); this version already enforces the paywall from the database.
+ * `/dashboard/books/[slug]/read`: Figma "The Book" frame. The server checks the session and the
+ * purchase, sends ONE chapter, and the browser lays it out in pages that fit this screen.
+ * `?idx=` picks a chapter, `?w=` a word (`end` = the last page, used when stepping back a chapter).
  */
 export default async function ReaderPage({ params, searchParams }: PageProps<"/dashboard/books/[slug]/read">) {
   const user = await requireUser();
@@ -30,48 +33,49 @@ export default async function ReaderPage({ params, searchParams }: PageProps<"/d
   if (!book || !ebook) notFound();
 
   // The paywall: no entitlement row for this user and edition means no chapter text.
-  const entitlement = await prisma.entitlement.findUnique({
-    where: { userId_editionId: { userId: user.id, editionId: ebook.id } },
-    select: { id: true },
-  });
-  if (!entitlement) notFound();
+  const entitled = await prisma.entitlement.findUnique({ where: { userId_editionId: { userId: user.id, editionId: ebook.id } }, select: { id: true } });
+  if (!entitled) notFound();
 
-  const chapters = await prisma.chapter.findMany({ where: { editionId: ebook.id }, orderBy: { idx: "asc" }, select: { idx: true, title: true, body: true } });
+  const chapters = await prisma.chapter.findMany({ where: { editionId: ebook.id }, orderBy: { idx: "asc" }, select: { idx: true, title: true, wordCount: true } });
   if (chapters.length === 0) notFound();
 
-  const requested = typeof sp.idx === "string" ? Number(sp.idx) : NaN;
-  const chapter = chapters.find((c) => c.idx === requested) ?? chapters[0];
-  const position = chapters.findIndex((c) => c.idx === chapter.idx);
-  const paragraphs = (chapter.body ?? "").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  // Which chapter and word? Explicit link first, otherwise resume where the saved position says.
+  const saved = await prisma.readingPosition.findUnique({ where: { userId_editionId: { userId: user.id, editionId: ebook.id } }, select: { locator: true } });
+  const resume = saved ? parseLocator(saved.locator) : null;
+  const wantedIdx = typeof sp.idx === "string" ? Number(sp.idx) : (resume?.chapterIdx ?? chapters[0].idx);
+  const position = Math.max(0, chapters.findIndex((c) => c.idx === wantedIdx));
+  const meta = chapters[position];
+  const startWord = typeof sp.idx === "string" ? (sp.w === "end" ? Math.max(0, meta.wordCount - 1) : Number(sp.w) || 0) : (resume?.offset ?? 0);
+
+  const [chapter, bookmarks] = await Promise.all([
+    prisma.chapter.findUnique({ where: { editionId_idx: { editionId: ebook.id, idx: meta.idx } }, select: { title: true, body: true } }),
+    prisma.bookmark.findMany({ where: { userId: user.id, editionId: ebook.id, chapterIdx: meta.idx }, select: { id: true, position: true } }),
+  ]);
+  const paragraphs = (chapter?.body ?? "").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const wordsBefore = chapters.slice(0, position).reduce((n, c) => n + c.wordCount, 0);
+  const totalWords = chapters.reduce((n, c) => n + c.wordCount, 0);
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <BreadcrumbBar
-        bookTitle={book.title}
-        actions={<ReaderActions editionId={ebook.id} chapterIdx={chapter.idx} initiallyBookmarked={false} />}
-      />
-      <div className="flex flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 px-6 py-6 md:px-16 md:py-8">
-            <h1 className="font-display text-[34px] text-black">{chapter.title}</h1>
-            <div className="mt-8 max-w-[680px] space-y-5 text-lg leading-relaxed text-black">
-              {paragraphs.map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-            </div>
-          </div>
-          <ReaderPager
-            baseHref={`/dashboard/books/${slug}/read`}
-            editionId={ebook.id}
-            chapterIdx={chapter.idx}
-            prevIdx={position > 0 ? chapters[position - 1].idx : null}
-            nextIdx={position < chapters.length - 1 ? chapters[position + 1].idx : null}
-            totalChapters={chapters.length}
-          />
-        </div>
+    <div className="flex h-[calc(100dvh-3.5rem)] flex-col md:h-dvh">
+      <BreadcrumbBar bookTitle={book.title} actions={<ReaderActions key={meta.idx} editionId={ebook.id} chapterIdx={meta.idx} bookmarks={bookmarks} />} />
+      <div className="flex min-h-0 flex-1">
+        <ChapterReaderClient
+          key={meta.idx}
+          slug={slug}
+          editionId={ebook.id}
+          chapterIdx={meta.idx}
+          title={meta.title}
+          paragraphs={paragraphs}
+          startWord={startWord}
+          prevIdx={position > 0 ? chapters[position - 1].idx : null}
+          nextIdx={position < chapters.length - 1 ? chapters[position + 1].idx : null}
+          wordsBefore={wordsBefore}
+          wordsInChapter={meta.wordCount}
+          totalWords={totalWords}
+        />
         <ReaderRail cover={book.cover} title={book.title} author={book.author} description={book.description ?? ""} />
       </div>
-      <ReaderProgressSync editionId={ebook.id} chapterIdx={chapter.idx} />
+      <ReaderProgressSync />
     </div>
   );
 }

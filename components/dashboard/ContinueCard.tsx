@@ -1,84 +1,53 @@
 import Image from "next/image";
 import Link from "next/link";
+
 import { MaskIcon } from "@/components/ui/MaskIcon";
 
-export function formatCount(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
 interface ContinueCardProps {
-  slug: string;
-  editionId: string;
-  chapterIdx: number;
+  href: string;
   title: string;
   author: string;
   cover: string;
-  rating: number;
-  /** Eye icon (reading) / headphone icon (listening) — no dedicated analytics field exists in the mock data, so this reuses `book.reviewCount` as a stand-in engagement number. */
-  statIcon: string;
-  statCount: number;
-  bookmarkCount: number;
+  /** 0 to 100, from the saved reading or listening position. */
   progressPercent: number;
-  variant: "reading" | "listening";
-  /** Set on the first card in view — Next.js flags the visible cover as the LCP candidate. */
+  /** The person's own bookmarks on this book (never popularity numbers). */
+  bookmarkCount: number;
+  format: "ebook" | "audiobook";
+  /** Set on the first card in view: Next.js treats the visible cover as the LCP candidate. */
   priority?: boolean;
 }
 
-/** Book card with a progress bar (Figma: "My dashboard" frame, "Continue Reading"/"Continue Listening" rows). */
-export function ContinueCard({
-  slug,
-  editionId,
-  chapterIdx,
-  title,
-  author,
-  cover,
-  rating,
-  statIcon,
-  statCount,
-  bookmarkCount,
-  progressPercent,
-  variant,
-  priority,
-}: ContinueCardProps) {
-  const body = (
-    <div className="flex h-[346px] w-[710px] max-w-full shrink-0 items-center gap-8 rounded-[25px] border border-black px-8">
-      <div className="relative h-[313px] w-[255px] shrink-0 overflow-hidden rounded-[20px]">
+/** Book card with a progress bar (Figma: "My dashboard" frame). Shows real data only. */
+export function ContinueCard({ href, title, author, cover, progressPercent, bookmarkCount, format, priority }: ContinueCardProps) {
+  const pct = Math.round(progressPercent);
+  return (
+    <Link
+      href={href}
+      className="flex w-full max-w-[710px] flex-col items-center gap-6 rounded-[25px] border border-black p-6 transition-shadow hover:shadow-lg sm:h-[346px] sm:flex-row sm:gap-8 sm:px-8 sm:py-0"
+    >
+      <div className="relative aspect-[255/313] w-[200px] shrink-0 overflow-hidden rounded-[20px] sm:h-[313px] sm:w-[255px]">
         <Image src={cover} alt={`${title} cover`} fill sizes="255px" priority={priority} className="object-cover" />
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 font-display text-[32px] leading-tight text-black">{title}</p>
+      <div className="min-w-0 flex-1 self-stretch text-center sm:self-center sm:text-left">
+        <p className="line-clamp-2 font-display text-[28px] leading-tight text-black sm:text-[32px]">{title}</p>
         <p className="mt-1 font-medium text-gold/50">{author}</p>
-        <div className="mt-4 flex items-center gap-3 text-[10px] text-black">
-          <span className="flex items-center gap-1 rounded-full bg-black/15 px-2 py-1">
-            <MaskIcon name="ic--baseline-star-rate" size={13} className="text-gold-bright" />
-            {rating}
-          </span>
+        <div className="mt-4 flex items-center justify-center gap-4 text-xs text-black sm:justify-start">
           <span className="flex items-center gap-1">
-            <MaskIcon name={statIcon} size={15} />
-            {formatCount(statCount)}
+            <MaskIcon name={format === "ebook" ? "akar-icons--eye" : "fluent--headphones-sound-wave-48-filled"} size={15} />
+            {format === "ebook" ? "Ebook" : "Audiobook"}
           </span>
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1" title="Your bookmarks">
             <MaskIcon name="basil--bookmark-outline" size={16} />
-            {formatCount(bookmarkCount)}
+            {bookmarkCount}
           </span>
         </div>
-        <div className="mt-9">
-          <p className="text-[15px] font-display text-gold">{progressPercent}%</p>
-          <div className="mt-1 h-2 w-full max-w-[365px] rounded-full bg-line">
-            <div className="h-2 rounded-full bg-gold-bright" style={{ width: `${progressPercent}%` }} />
+        <div className="mt-8 sm:mt-9">
+          <p className="font-display text-[15px] text-gold">{pct}%</p>
+          <div className="mt-1 h-2 w-full max-w-[365px] rounded-full bg-line" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${title} progress`}>
+            <div className="h-2 rounded-full bg-gold-bright" style={{ width: `${pct}%` }} />
           </div>
         </div>
       </div>
-    </div>
-  );
-
-  // "Continue Listening" has nowhere to send the reader yet (no player UI built — see lib/stores/player-store.ts),
-  // so only the reading variant is a real link.
-  if (variant === "listening") return body;
-
-  return (
-    <Link href={`/dashboard/books/${slug}/read?editionId=${editionId}&idx=${chapterIdx}`} className="block">
-      {body}
     </Link>
   );
 }

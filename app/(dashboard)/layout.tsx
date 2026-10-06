@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 
+import { AudioHost } from "@/components/audio/AudioHost";
+import { MiniPlayer } from "@/components/audio/MiniPlayer";
+import { MobileNav } from "@/components/dashboard/MobileNav";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { requireUser } from "@/lib/server/session";
 
@@ -13,8 +16,16 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="flex min-h-screen bg-cream">
-      <Sidebar user={user} />
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="hidden md:block">
+        <Sidebar user={user} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <MobileNav user={user} />
+        {children}
+      </div>
+      {/* One audio element for the whole dashboard, so listening continues while browsing. */}
+      <AudioHost />
+      <MiniPlayer />
     </div>
   );
 }

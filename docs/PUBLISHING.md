@@ -24,7 +24,7 @@ Flags: `--dry-run` checks everything and writes nothing. `--no-upload` writes on
 ```
 
 - **Ebook** (`"format": "EPUB"`): each chapter is a plain text file; blank lines separate paragraphs. Exactly the chapters with `isFreePreview: true` can be read without buying.
-- **Audiobook** (`"format": "AUDIOBOOK"`): each chapter has `"audio": "ch1.mp3"` (or `.m4a`) and `"durationSeconds"`. Files should be 192 to 320 kbps, constant bitrate, with the index at the start of the file (ffmpeg `-movflags +faststart` for m4a) so scrubbing is exact. If `ffprobe` is installed the script warns about other bitrates. Audio goes to the PROTECTED bucket only.
+- **Audiobook** (`"format": "AUDIOBOOK"`): each chapter has `"audio": "ch1.mp3"` (or `.m4a`) and `"durationSeconds"`, and optionally `"file": "ch1.txt"` with the chapter text, which the listening page shows as read-along text (words turn black as they are spoken; timing is estimated from word length until a real timing file exists). Files should be 192 to 320 kbps, constant bitrate, with the index at the start of the file (ffmpeg `-movflags +faststart` for m4a) so scrubbing is exact. If `ffprobe` is installed the script warns about other bitrates. Audio goes to the PROTECTED bucket only.
 - Paths are relative to the manifest. To change an existing edition, add `"id": "<edition id>"` to `edition` (the script prints the id when it creates one).
 - The audiobook is never shown for sale until its edition is active and has files, otherwise the book page says "Audiobook coming soon".
 

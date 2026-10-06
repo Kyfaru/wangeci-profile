@@ -45,3 +45,12 @@
 - **Cart**: books are quantity one; the browser cart is a shopping list reconciled with server prices; mergeCart saves it to the account at sign-in.
 - **Dead code removed**: password-reset and verify-link email templates (accounts are passwordless).
 - **Cron**: daily on Vercel (plan limit); production should schedule it more often in Coolify (every 5 minutes is fine).
+
+## Phase 4
+- **Reader**: CSS columns inside a fixed-size viewport, measured in the browser (client-only render). Saved position = "chapter:word" so any device resumes at the same place; total page count is an estimate from words per page.
+- **Server computes progress**: the browser sends only chapter and word (or seconds); the percentage is derived from chapter lengths on the server. Entitlement is checked on every save, bookmark, audio link and chapter page.
+- **Audio**: signed links live chapter length + 5 minutes (10 min minimum, 3 h maximum) and are renewed at 80 percent of their life by the same <audio> element; every renewal re-checks the purchase. One element in the dashboard layout, a mini player elsewhere.
+- **Read-along**: word timing is estimated (word length + punctuation pauses) because no aligned timing file exists; exact timings can replace lib/audio/word-timing.ts later. Spoken words turn black, future words stay faint.
+- **Listening page layout** follows the reader frame, with a music-style player bar in place of "Page X of Y" (your request).
+- **Dev audio**: bucket "local" assets are served from /public only outside production; /public/dev-audio is git-ignored (it holds your Dedication.mp3).
+- **Settings 2FA** uses the Better Auth twoFactor plugin in passwordless mode with QR and backup codes; admin enforcement comes in Phase 5.

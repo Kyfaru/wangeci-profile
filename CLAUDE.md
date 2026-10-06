@@ -22,4 +22,5 @@ Source of truth for scope: `docs/BUILD_BRIEF.md` (original) overridden by `docs/
 - Phase 1 (database + identity): done on `phase/1-database-identity`. Local DB: `pnpm db:dev`, `pnpm db:migrate`, `pnpm db:seed`; DB tests need TEST_DATABASE_URL.
 - Phase 2 (catalogue, public pages): done on `phase/2-catalogue-public`. Publish books with `docs/PUBLISHING.md`.
 - Phase 3 (money path): done on `phase/3-money-path`. Payment news always goes through `applyProviderEvent`; Daraja is unverified against official docs.
-- Phase 4 onward: see `docs/phase-reports/`.
+- Phase 4 (library, reader, listening): done on `phase/4-library-reader-listening`. Read-along timing is estimated.
+- Phase 5 onward: see `docs/phase-reports/`.

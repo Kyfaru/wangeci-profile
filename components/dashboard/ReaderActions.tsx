@@ -1,33 +1,40 @@
 "use client";
 
 import { useState } from "react";
+
 import { MaskIcon } from "@/components/ui/MaskIcon";
-import { apiClient } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
+import { useReaderStore } from "@/lib/stores/reader-store";
 
-/** Bookmark toggle + kebab menu (Figma: "The Book" frame breadcrumb bar). No menu contents are designed yet, so the kebab is icon-only. */
-export function ReaderActions({
-  editionId,
-  chapterIdx,
-  initiallyBookmarked,
-}: {
-  editionId: string;
-  chapterIdx: number;
-  initiallyBookmarked: boolean;
-}) {
-  const [bookmarked, setBookmarked] = useState(initiallyBookmarked);
+interface Mark {
+  id: string;
+  position: number;
+}
+
+/**
+ * Bookmark toggle for the page being read. A bookmark counts as "on this page" when its word falls
+ * between the first and last word of the page, so it still shows after the text is re-flowed on another device.
+ */
+export function ReaderActions({ editionId, chapterIdx, bookmarks }: { editionId: string; chapterIdx: number; bookmarks: Mark[] }) {
+  const { wordOffset, wordEnd } = useReaderStore();
+  const [marks, setMarks] = useState<Mark[]>(bookmarks);
   const [pending, setPending] = useState(false);
+  const here = marks.find((m) => m.position >= wordOffset && m.position < Math.max(wordEnd, wordOffset + 1));
 
-  async function addBookmark() {
-    if (pending || bookmarked) return; // un-bookmarking isn't designed yet
+  async function toggle() {
+    if (pending) return;
     setPending(true);
-    setBookmarked(true); // optimistic
     try {
-      await apiClient.post("/bookmarks", { editionId, chapterIdx, position: 0 });
-    } catch {
-      // No session cookie is set anywhere in this build yet (see lib/dashboard/current-user.ts),
-      // so this 401s until a login flow exists — silently revert rather than surface an error.
-      setBookmarked(false);
+      if (here) {
+        const res = await fetch(`/api/bookmarks?id=${encodeURIComponent(here.id)}`, { method: "DELETE" });
+        if (res.ok) setMarks((m) => m.filter((x) => x.id !== here.id));
+      } else {
+        const res = await fetch("/api/bookmarks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editionId, chapterIdx, position: wordOffset }) });
+        if (res.ok) {
+          const { bookmark } = (await res.json()) as { bookmark: Mark };
+          setMarks((m) => [...m, { id: bookmark.id, position: bookmark.position }]);
+        }
+      }
     } finally {
       setPending(false);
     }
@@ -35,17 +42,8 @@ export function ReaderActions({
 
   return (
     <div className="flex shrink-0 items-center gap-4 text-black">
-      <button
-        type="button"
-        onClick={addBookmark}
-        aria-label={bookmarked ? "Bookmarked" : "Add bookmark"}
-        aria-pressed={bookmarked}
-        className={cn("transition-opacity hover:opacity-70", bookmarked && "text-gold")}
-      >
+      <button type="button" onClick={toggle} aria-label={here ? "Remove bookmark" : "Add bookmark"} aria-pressed={Boolean(here)} className={cn("transition-opacity hover:opacity-70", here && "text-gold")}>
         <MaskIcon name="basil--bookmark-outline" size={22} />
-      </button>
-      <button type="button" aria-label="More options" className="hover:opacity-70">
-        <MaskIcon name="charm--menu-kebab" size={20} />
       </button>
     </div>
   );
