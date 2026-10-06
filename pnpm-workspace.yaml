@@ -1,5 +1,10 @@
 allowBuilds:
   '@embedded-postgres/windows-x64': true
+  # Local-only test database (scripts/dev-db.mjs): other platforms must not run its install script, or CI and Vercel installs fail.
+  '@embedded-postgres/linux-x64': false
+  '@embedded-postgres/linux-arm64': false
+  '@embedded-postgres/darwin-x64': false
+  '@embedded-postgres/darwin-arm64': false
   '@prisma/client': true
   '@prisma/engines': true
   '@sentry/cli': true

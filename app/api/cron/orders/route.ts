@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { env } from "@/lib/env";
 import { reconcilePendingOrder } from "@/lib/orders/apply-event";
+import { purgeAbandonedGuestAccounts } from "@/lib/checkout/abandoned";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ function authorised(request: Request): boolean {
  *  1. Ask the provider about orders still PENDING after 2 minutes (catches a missed webhook).
  *  2. Mark orders PENDING for more than 24 hours as EXPIRED.
  *  3. Delete contact-form bell items older than 90 days.
+ *  4. Delete accounts that checkout created but nobody ever paid for or signed in to (after 7 days).
  */
 export async function GET(request: Request) {
   if (!authorised(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -52,5 +54,7 @@ export async function GET(request: Request) {
   const expired = await prisma.order.updateMany({ where: { status: "PENDING", createdAt: { lt: new Date(now - DAY) } }, data: { status: "EXPIRED", failureReason: "expired_unpaid" } });
   const purged = await prisma.notificationLog.deleteMany({ where: { channel: "IN_APP", purpose: "contact_message", createdAt: { lt: new Date(now - 90 * DAY) } } });
 
-  return NextResponse.json({ checked: stuck.length, outcomes, expired: expired.count, purgedMessages: purged.count });
+  const purgedAccounts = await purgeAbandonedGuestAccounts(new Date(now - 7 * DAY));
+
+  return NextResponse.json({ checked: stuck.length, outcomes, expired: expired.count, purgedMessages: purged.count, purgedAccounts });
 }

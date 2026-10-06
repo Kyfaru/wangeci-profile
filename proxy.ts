@@ -11,7 +11,7 @@ const PROTECTED_PREFIXES = ["/dashboard", "/account", "/admin"];
 const isDev = process.env.NODE_ENV === "development";
 
 // Content-Security-Policy. REPORT-ONLY for now: it logs violations in the browser console
-// without blocking anything. Phase 6 flips it to enforcing once the pages are clean.
+// without blocking anything. Flip it to enforcing after a staging pass with the browser console open (see docs/GO_LIVE.md).
 function buildCsp(nonce: string) {
   return [
     "default-src 'self'",
@@ -20,8 +20,8 @@ function buildCsp(nonce: string) {
     "img-src 'self' data: blob: https://*.r2.dev",
     "font-src 'self' data:",
     "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
-    "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://challenges.cloudflare.com",
-    "frame-src https://challenges.cloudflare.com", // Turnstile widget
+    "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://challenges.cloudflare.com https://checkout.paystack.com https://api.paystack.co",
+    "frame-src https://challenges.cloudflare.com https://checkout.paystack.com", // Turnstile widget, Paystack card popup
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
