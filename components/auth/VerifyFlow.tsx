@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { mergeCart } from "@/app/actions/cart";
 import { OtpInput } from "@/components/auth/OtpInput";
 import { PhoneField, toE164 } from "@/components/auth/PhoneField";
 import { TurnstileWidget, type TurnstileHandle } from "@/components/auth/TurnstileWidget";
@@ -14,6 +15,7 @@ import { OTP_LENGTH } from "@/lib/auth/constants";
 import { clearFlow, describeAuthError, loadFlow, saveFlow, type Flow } from "@/lib/auth/flow";
 import { safeRedirect } from "@/lib/auth/safe-redirect";
 import { cn } from "@/lib/cn";
+import { useCartStore } from "@/lib/stores/cart-store";
 import { useSessionStore } from "@/lib/stores/session-store";
 
 type Step = "loading" | "code" | "phone-send" | "phone-code" | "blocked";
@@ -51,6 +53,9 @@ export function VerifyFlow({ complete, redirect, turnstileSiteKey }: { complete:
 
   const finish = useCallback(async () => {
     clearFlow();
+    // Merge the browser shopping list into the saved cart (deduplicated, quantity one).
+    const ids = useCartStore.getState().items.map((i) => i.editionId).filter((id): id is string => Boolean(id));
+    if (ids.length > 0) await mergeCart(ids).catch(() => {});
     await useSessionStore.getState().hydrate();
     router.replace(safeRedirect(flow?.redirect ?? redirect));
     router.refresh();

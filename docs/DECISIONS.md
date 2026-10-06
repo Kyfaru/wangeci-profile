@@ -34,3 +34,14 @@
 - **Legal pages** are drafts with a visible banner, written to mention the Kenya Data Protection Act 2019, processors, and deletion requests; refund window, entity name and retention periods are TODO(client).
 - **Publishing** is a script (scripts/publish-edition.ts) until the admin upload page exists; it is inactive-by-default and refuses non-local databases without --yes.
 - **Sitemap and robots** exclude private areas; robots blocks everything unless NEXT_PUBLIC_SITE_ENV=production.
+
+## Phase 3
+- **Paystack signing**: the secret key signs webhooks (verified in their docs), so PAYSTACK_WEBHOOK_SECRET was removed. There is no charge.failed event, so failures come from the verify call and the cron sweep.
+- **One path for all payment news**: webhook, status fallback and cron all call applyProviderEvent (lib/orders/apply-event.ts). Access is granted only inside one transaction with a conditional status update, never from the browser or the success page.
+- **Late money still counts**: an order that was FAILED or EXPIRED can still become PAID if the provider confirms payment; REFUNDED and PAID never go backwards.
+- **M-Pesa trust**: callbacks are unsigned, so the URL holds a secret and a paid callback is confirmed with the STK query API before granting. UNVERIFIED against official Daraja docs (could not be fetched): confirm in sandbox.
+- **Refund actor**: refund.completed is written to audit_log in the same transaction as the access removal; the actor is the admin who requested it, else the owner.
+- **Provider reference**: Paystack uses our generated reference (saved before the provider call, so the webhook can always find the order); M-Pesa uses the CheckoutRequestID returned by Safaricom.
+- **Cart**: books are quantity one; the browser cart is a shopping list reconciled with server prices; mergeCart saves it to the account at sign-in.
+- **Dead code removed**: password-reset and verify-link email templates (accounts are passwordless).
+- **Cron**: daily on Vercel (plan limit); production should schedule it more often in Coolify (every 5 minutes is fine).

@@ -34,7 +34,7 @@ const envSchema = z.object({
   PAYSTACK_PUBLIC_KEY: z
     .string()
     .startsWith("pk_", "PAYSTACK_PUBLIC_KEY must start with pk_"),
-  PAYSTACK_WEBHOOK_SECRET: z.string().min(1),
+  // Paystack signs webhooks with the secret key itself (confirmed in their docs): no separate webhook secret.
 
   // Cloudflare R2 (S3-compatible object storage)
   R2_ACCOUNT_ID: z.string().min(1),
@@ -75,6 +75,21 @@ const envSchema = z.object({
   QSTASH_CURRENT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
   QSTASH_NEXT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
 
+  // M-Pesa (Safaricom Daraja STK push). Optional locally (the M-Pesa option then hides); required in production.
+  DARAJA_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  DARAJA_CONSUMER_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  DARAJA_CONSUMER_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  DARAJA_SHORTCODE: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^\d{5,7}$/).optional()),
+  DARAJA_PASSKEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  // "CustomerPayBillOnline" for a Paybill, "CustomerBuyGoodsOnline" for a Till.
+  DARAJA_TRANSACTION_TYPE: z.enum(["CustomerPayBillOnline", "CustomerBuyGoodsOnline"]).default("CustomerPayBillOnline"),
+  // Safaricom does not sign callbacks, so the callback URL carries this secret in its path
+  // (/api/webhooks/mpesa/<token>). Anything else is a 404.
+  DARAJA_CALLBACK_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
+
+  // Shared secret for scheduled jobs (sent as "Authorization: Bearer <secret>").
+  CRON_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
+
   // Where urgent admin alerts and contact-form messages are emailed (Wangeci's mailbox).
   // TODO(client): her address. Without it the bell still works, but no email is sent.
   CONTACT_INBOX_EMAIL: z.preprocess((v) => (v === "" ? undefined : v), z.string().email().optional()),
@@ -109,6 +124,12 @@ const envSchema = z.object({
     "QSTASH_TOKEN",
     "QSTASH_CURRENT_SIGNING_KEY",
     "QSTASH_NEXT_SIGNING_KEY",
+    "CRON_SECRET",
+    "DARAJA_CONSUMER_KEY",
+    "DARAJA_CONSUMER_SECRET",
+    "DARAJA_SHORTCODE",
+    "DARAJA_PASSKEY",
+    "DARAJA_CALLBACK_TOKEN",
   ] as const) {
     if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required in production` });
   }

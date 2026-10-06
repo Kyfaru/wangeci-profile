@@ -246,6 +246,11 @@ model BookPreview {
 // 3. Commerce
 // ---------------------------------------------------------------------------
 
+enum PaymentProvider {
+  PAYSTACK
+  MPESA
+}
+
 enum OrderStatus {
   PENDING
   PAID
@@ -291,20 +296,28 @@ model CartItem {
 }
 
 model Order {
-  id                String      @id @default(cuid())
-  status            OrderStatus @default(PENDING)
-  totalAmount       Decimal     @db.Decimal(10, 2)
-  currency          String      @default("KES")
-  // Nullable until a Paystack transaction is initiated for this order (an
-  // Order row is created PENDING first, then the reference is attached once
-  // Paystack returns one). @unique on Postgres permits multiple NULLs, so
-  // many not-yet-initiated orders can coexist.
-  paystackReference String?     @unique
+  id                  String           @id @default(cuid())
+  status              OrderStatus      @default(PENDING)
+  totalAmount         Decimal          @db.Decimal(10, 2)
+  currency            String           @default("KES")
+  // Which provider is collecting the money. Null until the order is handed to a provider.
+  provider            PaymentProvider?
+  // The provider's id for this payment: our generated reference for Paystack, the CheckoutRequestID
+  // for M-Pesa. Unique, and Postgres allows many NULLs, so unstarted orders can coexist.
+  providerReference   String?          @unique
+  // M-Pesa (Daraja) details.
+  merchantRequestId   String?
+  mpesaReceipt        String?          @unique
+  payerPhone          String?
+  paidAt              DateTime?
+  failureReason       String?
+  // Admin who asked for the refund (audit trail); set together with refundRequestedAt.
+  refundRequestedById String?
   // Set when an admin asks the provider for a refund. The order only becomes REFUNDED when the
   // signed refund event arrives; this lets the UI show "refund pending" without a new status.
-  refundRequestedAt DateTime?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  refundRequestedAt   DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   // Restrict, not Cascade: an order is a financial record and must outlive
   // the user row (e.g. for accounting/refunds) even if the account is
