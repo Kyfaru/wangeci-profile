@@ -26,6 +26,8 @@ interface CartState {
   removeItem: (id: string) => void;
   updateQty: (id: string, qty: number) => void;
   clear: () => void;
+  /** Drops items the server no longer sells and refreshes prices from the server quote. */
+  reconcile: (valid: { editionId: string; price: number; currency: string }[]) => void;
   totalItems: () => number;
   totalPrice: () => number;
 }
@@ -39,6 +41,9 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           const existing = state.items.find((i) => i.id === item.id);
           const addQty = item.qty ?? 1;
+
+          // A digital book can only be bought once: adding it again changes nothing.
+          if (existing && item.type === "book") return state;
 
           if (existing) {
             return {
@@ -63,6 +68,16 @@ export const useCartStore = create<CartState>()(
         })),
 
       clear: () => set({ items: [] }),
+
+      reconcile: (valid) =>
+        set((state) => ({
+          items: state.items
+            .filter((i) => i.type !== "book" || valid.some((v) => v.editionId === i.editionId))
+            .map((i) => {
+              const v = valid.find((x) => x.editionId === i.editionId);
+              return v ? { ...i, price: v.price, currency: v.currency, qty: 1 } : i;
+            }),
+        })),
 
       totalItems: () => get().items.reduce((sum, i) => sum + i.qty, 0),
 

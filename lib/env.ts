@@ -34,7 +34,7 @@ const envSchema = z.object({
   PAYSTACK_PUBLIC_KEY: z
     .string()
     .startsWith("pk_", "PAYSTACK_PUBLIC_KEY must start with pk_"),
-  PAYSTACK_WEBHOOK_SECRET: z.string().min(1),
+  // Paystack signs webhooks with the secret key itself (confirmed in their docs): no separate webhook secret.
 
   // Cloudflare R2 (S3-compatible object storage)
   R2_ACCOUNT_ID: z.string().min(1),
@@ -52,10 +52,54 @@ const envSchema = z.object({
   AT_API_KEY: z.string().min(1),
   AT_SENDER_ID: z.string().max(11, "AT_SENDER_ID must be at most 11 characters"),
 
-  // ElevenLabs (audiobook narration/voice)
-  ELEVENLABS_API_KEY: z
-    .string()
-    .startsWith("sk_", "ELEVENLABS_API_KEY must start with sk_"),
+  // Audio is uploaded as finished files (no text-to-speech), so there is no ElevenLabs key.
+
+  // Origins allowed to call the auth endpoints, besides BETTER_AUTH_URL.
+  // Comma-separated (e.g. the staging domain). localhost is added only in development.
+  TRUSTED_ORIGINS: z.string().optional(),
+
+  // Upstash Redis (rate limits). Required in production, optional locally.
+  UPSTASH_REDIS_REST_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
+  UPSTASH_REDIS_REST_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // Africa's Talking does not sign delivery reports, so the callback URL carries this secret
+  // (?token=...). Required in production.
+  AT_WEBHOOK_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
+
+  // Cloudflare Turnstile (bot check on code requests). Required in production.
+  // Cloudflare publishes test keys that always pass for local development.
+  TURNSTILE_SECRET_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // Upstash QStash (queue that sends one-time codes). Optional locally: codes are then sent directly.
+  QSTASH_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  QSTASH_CURRENT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  QSTASH_NEXT_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // M-Pesa (Safaricom Daraja STK push). Optional locally (the M-Pesa option then hides); required in production.
+  DARAJA_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  DARAJA_CONSUMER_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  DARAJA_CONSUMER_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  DARAJA_SHORTCODE: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^\d{5,7}$/).optional()),
+  DARAJA_PASSKEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  // "CustomerPayBillOnline" for a Paybill, "CustomerBuyGoodsOnline" for a Till.
+  DARAJA_TRANSACTION_TYPE: z.enum(["CustomerPayBillOnline", "CustomerBuyGoodsOnline"]).default("CustomerPayBillOnline"),
+  // Safaricom does not sign callbacks, so the callback URL carries this secret in its path
+  // (/api/webhooks/mpesa/<token>). Anything else is a 404.
+  DARAJA_CALLBACK_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
+
+  // Processing fee added at checkout, as a percentage of the amount after discount. 0 (default) = no fee.
+  CHECKOUT_FEE_PERCENT: z.preprocess((v) => (v === "" || v === undefined ? 0 : v), z.coerce.number().min(0).max(20)),
+
+  // Shared secret for scheduled jobs (sent as "Authorization: Bearer <secret>").
+  CRON_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
+
+  // Where urgent admin alerts and contact-form messages are emailed (Wangeci's mailbox).
+  // TODO(client): her address. Without it the bell still works, but no email is sent.
+  CONTACT_INBOX_EMAIL: z.preprocess((v) => (v === "" ? undefined : v), z.string().email().optional()),
+
+  // Google sign-in. Optional until the OAuth client exists; the button hides without them.
+  GOOGLE_CLIENT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  GOOGLE_CLIENT_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
 
   // Sentry — optional until a later agent wires up error monitoring.
   // Empty-string env vars (common when a platform sets an unfilled
@@ -72,11 +116,35 @@ const envSchema = z.object({
 
   // Comma-separated list of emails allowed into the admin panel
   ADMIN_EMAIL_ALLOWLIST: z.string().min(1),
+}).superRefine((value, ctx) => {
+  // Fail fast at boot in production rather than on the first request that needs the value.
+  if (value.NODE_ENV !== "production") return;
+  for (const key of [
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "AT_WEBHOOK_TOKEN",
+    "TURNSTILE_SECRET_KEY",
+    "QSTASH_TOKEN",
+    "QSTASH_CURRENT_SIGNING_KEY",
+    "QSTASH_NEXT_SIGNING_KEY",
+    "CRON_SECRET",
+    "DARAJA_CONSUMER_KEY",
+    "DARAJA_CONSUMER_SECRET",
+    "DARAJA_SHORTCODE",
+    "DARAJA_PASSKEY",
+    "DARAJA_CALLBACK_TOKEN",
+  ] as const) {
+    if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required in production` });
+  }
 });
 
-// Parsing at import time (rather than lazily on first use) means a bad
-// deploy fails at boot, not on the first request that happens to touch
-// the missing var — fail fast and loud instead of intermittently.
-export const env = envSchema.parse(process.env);
+// Parsed on first import. `instrumentation.ts` imports this at server start in
+// production, so a bad deploy fails at boot (not on the first request).
+// `next build` imports route modules to read their config but has no secrets (Docker/CI), so
+// validation is skipped for that phase only. Nothing reads these values during the build.
+export const env: z.infer<typeof envSchema> =
+  process.env.NEXT_PHASE === "phase-production-build"
+    ? (process.env as unknown as z.infer<typeof envSchema>)
+    : envSchema.parse(process.env);
 
 export type Env = z.infer<typeof envSchema>;

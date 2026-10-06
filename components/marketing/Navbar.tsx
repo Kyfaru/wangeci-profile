@@ -73,6 +73,13 @@ export function Navbar() {
     </Link>
   );
 
+  // Far right of every page: signed-out visitors land on sign-in; signed-in ones are sent on to the dashboard by that page.
+  const login = (
+    <Link href="/sign-in" aria-label="Sign in" className="grid size-11 place-items-center transition-opacity hover:opacity-70">
+      <MaskIcon name="lucide--user" size={30} />
+    </Link>
+  );
+
   return (
     <header className={cn("fixed inset-x-0 top-0 z-50", !full && "px-4 pt-4 md:pt-6")}>
       <nav
@@ -126,9 +133,10 @@ export function Navbar() {
               />
             </div>
             {cart}
+            {login}
           </div>
         ) : (
-          <div className="hidden md:block">
+          <div className="hidden items-center gap-2 md:flex">
             {solid ? (
               <FillButton href={BOOK_HREF} className="py-2 text-lg">
                 Get My Book
@@ -141,6 +149,7 @@ export function Navbar() {
                 Get My Book <MaskIcon name="solar--arrow-right-up-line-duotone" className="text-gold" />
               </Link>
             )}
+            {login}
           </div>
         )}
 
@@ -148,6 +157,7 @@ export function Navbar() {
         <span className="text-lg font-medium md:hidden">Wangeci</span>
         <div className="flex items-center gap-1 md:hidden">
           {full && cart}
+          {login}
           <button
             type="button"
             aria-label={open ? "Close menu" : "Open menu"}
@@ -203,7 +213,7 @@ export function Navbar() {
                       aria-label="From Pieces To Power"
                       className={cn("hidden min-[390px]:block", wide ? "w-full max-w-[9.5rem]" : "w-[6.5rem]")}
                     >
-                      <Image src={BOOK.cover} alt="" width={152} height={215} className="h-auto w-full rounded-lg object-cover shadow-md" />
+                      <Image src={BOOK.cover} alt={`${BOOK.titleTop} ${BOOK.titleBottom} ${BOOK.accent} book cover`} width={152} height={215} className="h-auto w-full rounded-lg object-cover shadow-md" />
                     </Link>
                     <FillButton href={BOOK_HREF} className={cn("w-full text-center", wide ? "px-4! py-2! text-sm!" : "px-2.5! py-2! text-xs!")}>
                       Get My Book

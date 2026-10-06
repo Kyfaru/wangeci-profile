@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { BOOK_HREF } from "@/lib/content/landing";
@@ -7,8 +8,6 @@ import { useHydrated } from "@/lib/hooks/use-hydrated";
 import { useCartStore } from "@/lib/stores/cart-store";
 
 const money = (n: number, currency: string) => `${currency} ${n.toLocaleString("en-KE")}`;
-const qtyBtn =
-  "grid size-9 place-items-center rounded-full border border-navy/30 text-lg leading-none transition-colors hover:border-gold hover:text-gold";
 
 /**
  * `/cart` — not in Figma; built from the project tokens. Reads the
@@ -16,9 +15,24 @@ const qtyBtn =
  */
 export default function CartPage() {
   const hydrated = useHydrated();
-  const { items, updateQty, removeItem } = useCartStore();
+  const { items, removeItem, reconcile } = useCartStore();
+  const editionKey = items.map((i) => i.editionId).filter(Boolean).join(",");
+
+  // The cart is a shopping list. Ask the server what is really for sale and what it costs right now.
+  useEffect(() => {
+    if (!hydrated || !editionKey) return;
+    let cancelled = false;
+    fetch(`/api/cart/quote?ids=${encodeURIComponent(editionKey)}`)
+      .then((r) => r.json())
+      .then((q: { items?: { editionId: string; price: number; currency: string }[] }) => !cancelled && q.items && reconcile(q.items))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, editionKey, reconcile]);
   const currency = items[0]?.currency ?? "KES";
-  const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0);
+  // Display only: checkout re-reads every price from the database. Books are always quantity one.
+  const subtotal = items.reduce((sum, i) => sum + i.price, 0);
 
   return (
     <div className="mx-auto min-h-[70vh] max-w-[1100px] px-6 pb-24 pt-32 md:pt-40">
@@ -59,18 +73,7 @@ export default function CartPage() {
                   </button>
                 </div>
                 <div className="col-span-2 flex items-center justify-between gap-6 sm:col-span-1 sm:flex-col sm:items-end sm:gap-3">
-                  <div className="flex items-center gap-3">
-                    <button type="button" aria-label={`Decrease quantity of ${item.title}`} onClick={() => updateQty(item.id, item.qty - 1)} className={qtyBtn}>
-                      −
-                    </button>
-                    <span className="w-6 text-center text-lg" aria-live="polite">
-                      {item.qty}
-                    </span>
-                    <button type="button" aria-label={`Increase quantity of ${item.title}`} onClick={() => updateQty(item.id, item.qty + 1)} className={qtyBtn}>
-                      +
-                    </button>
-                  </div>
-                  <p className="text-lg font-medium text-navy">{money(item.qty * item.price, item.currency)}</p>
+                  <p className="text-lg font-medium text-navy">{money(item.price, item.currency)}</p>
                 </div>
               </li>
             ))}
@@ -82,7 +85,6 @@ export default function CartPage() {
               <dt>Subtotal</dt>
               <dd className="font-medium">{money(subtotal, currency)}</dd>
             </dl>
-            {/* TODO: /checkout is not built yet. */}
             <Link
               href="/checkout"
               className="mt-8 block rounded-[40px] bg-white py-3 text-center text-lg font-medium text-black transition-colors hover:bg-gold-bright"

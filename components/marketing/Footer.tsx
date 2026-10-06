@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { AppIcon } from "@/lib/icons";
+import { AppIcon, type AppIconName } from "@/lib/icons";
 import { cn } from "@/lib/cn";
 import { FOOTER } from "@/lib/content/landing";
+import { SITE } from "@/lib/site";
 
 /** Outlined text that draws itself in, with a cursor-following gradient reveal on hover. */
 function TextHoverEffect({
@@ -127,12 +128,19 @@ function FooterBackgroundGradient() {
 const linkClass = "transition-colors hover:text-gold";
 
 export function Footer() {
-  const { contact } = FOOTER;
-  const contactRows = [
-    { icon: "lucide:mail", text: contact.email, href: `mailto:${contact.email}` },
-    { icon: "lucide:phone", text: contact.phone, href: `tel:${contact.phone.replace(/\s/g, "")}` },
-    { icon: "lucide:map-pin", text: contact.place },
-  ] as const;
+  // Missing contact values are hidden in production and shown as TODO(client) elsewhere,
+  // so no placeholder phone/email ever reaches real visitors.
+  const { contact } = SITE;
+  const todo = (v: string | null) => v ?? (SITE.isProduction ? null : "TODO(client)");
+  const email = todo(contact.email);
+  const phone = todo(contact.phone);
+  const place = todo(contact.place);
+  const contactRows = ([
+    email && { icon: "lucide:mail", text: email, href: contact.email ? `mailto:${contact.email}` : undefined },
+    phone && { icon: "lucide:phone", text: phone, href: contact.phone ? `tel:${contact.phone.replace(/\s/g, "")}` : undefined },
+    place && { icon: "lucide:map-pin", text: place, href: undefined },
+  ] as const).filter((r): r is { icon: AppIconName; text: string; href: string | undefined } => Boolean(r));
+  const socials = FOOTER.socials.filter((s) => s.href || !SITE.isProduction);
 
   return (
     <footer className="relative h-fit overflow-hidden bg-navy text-cream/80">
@@ -176,7 +184,7 @@ export function Footer() {
               {contactRows.map((row) => (
                 <li key={row.icon} className="flex items-center space-x-2 md:space-x-3">
                   <AppIcon icon={row.icon} size={18} className="shrink-0 text-gold" />
-                  {"href" in row ? (
+                  {row.href ? (
                     <a href={row.href} className={`${linkClass} min-w-0 break-words`}>
                       {row.text}
                     </a>
@@ -193,8 +201,8 @@ export function Footer() {
 
         <div className="flex flex-col items-center justify-between gap-4 text-sm md:flex-row">
           <div className="flex space-x-6 text-white/60">
-            {FOOTER.socials.map((s) => (
-              <a key={s.label} href={s.href} aria-label={s.label} className={linkClass}>
+            {socials.map((s) => (
+              <a key={s.label} href={s.href ?? undefined} aria-label={s.label} className={linkClass}>
                 <AppIcon icon={s.icon} size={20} />
               </a>
             ))}
@@ -223,7 +231,7 @@ export function Footer() {
                 }}
               >
                 <Image
-                  src="/images/Kyfaru-Logo-Filled-07.png"
+                  src="/images/kyfaru-logo.png"
                   alt="Kyfaru"
                   width={32}
                   height={32}
@@ -235,8 +243,16 @@ export function Footer() {
             </Link>
           </div>
 
+          <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-white/60">
+            <Link href="/contact" className={linkClass}>Contact</Link>
+            <Link href="/terms" className={linkClass}>Terms</Link>
+            <Link href="/privacy" className={linkClass}>Privacy</Link>
+            <Link href="/refunds" className={linkClass}>Refunds</Link>
+            <Link href="/cookies" className={linkClass}>Cookies</Link>
+          </nav>
+
           <p className="text-center md:text-left">
-            &copy; {new Date().getFullYear()} Wangeci. All rights reserved.
+            &copy; {new Date().getFullYear()} {SITE.authorName}. All rights reserved.
           </p>
         </div>
       </div>

@@ -1,10 +1,7 @@
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
-// E.164: leading +, then 10-15 digits total (country code + subscriber
-// number), no spaces/dashes — this is the exact format Africa's Talking
-// requires for the `to` field.
-const E164_REGEX = /^\+\d{10,15}$/;
+import { E164_REGEX } from "@/lib/phone";
 
 const AT_BASE_URL =
   env.NODE_ENV === "production"

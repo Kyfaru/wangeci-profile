@@ -1,93 +1,90 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import Link from "next/link";
+
 import { ContinueCard } from "@/components/dashboard/ContinueCard";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { MaskIcon } from "@/components/ui/MaskIcon";
-import { CURRENT_USER_ID } from "@/lib/dashboard/current-user";
-import { findBookBySlug } from "@/lib/mock-books";
-import { getLibraryForUser, type LibraryFormat, type LibraryItem } from "@/lib/mock-user";
-import { listBookmarks } from "@/lib/server/mock-bookmarks-store";
+import { BOOK_HREF } from "@/lib/content/landing";
+import { cn } from "@/lib/cn";
+import { getLibrary, type LibraryFormat, type LibraryStatus } from "@/lib/library";
+import { requireUser } from "@/lib/server/session";
 
-export const metadata: Metadata = { title: "My Books — Felister Wangechi Kariuki" };
+export const metadata: Metadata = { title: "My Books" };
+export const dynamic = "force-dynamic";
 
-/** "My dashboard" Figma frame: Continue Reading / Continue Listening. */
-export default function DashboardBooksPage() {
-  const library = getLibraryForUser(CURRENT_USER_ID).filter((i) => i.status !== "completed");
+const FORMATS: [string, LibraryFormat | undefined][] = [["All", undefined], ["Ebooks", "ebook"], ["Audiobooks", "audiobook"]];
+const STATUSES: [string, LibraryStatus | undefined][] = [["All", undefined], ["Not started", "not-started"], ["In progress", "in-progress"], ["Completed", "completed"]];
+
+const chip = (active: boolean) => cn("rounded-full border px-4 py-1.5 text-sm transition-colors", active ? "border-navy bg-navy text-cream" : "border-black/20 text-black hover:border-navy");
+
+/** "My dashboard" Figma frame: Continue Reading / Continue Listening, plus the whole library with filters. */
+export default async function DashboardBooksPage({ searchParams }: PageProps<"/dashboard/books">) {
+  const user = await requireUser();
+  const sp = await searchParams;
+  const format = sp.format === "ebook" || sp.format === "audiobook" ? sp.format : undefined;
+  const status = sp.status === "not-started" || sp.status === "in-progress" || sp.status === "completed" ? sp.status : undefined;
+
+  const library = await getLibrary(user.id);
+  const filtered = library.filter((i) => (!format || i.format === format) && (!status || i.status === status));
+  const href = (f: LibraryFormat | undefined, s: LibraryStatus | undefined) => `/dashboard/books${f || s ? `?${new URLSearchParams({ ...(f ? { format: f } : {}), ...(s ? { status: s } : {}) })}` : ""}`;
+
+  const groups: { heading: string; icon: string; items: typeof filtered }[] = [
+    { heading: "Continue Reading", icon: "fluent--reading-list-20-filled", items: filtered.filter((i) => i.format === "ebook") },
+    { heading: "Continue Listening", icon: "hugeicons--audio-wave-02", items: filtered.filter((i) => i.format === "audiobook") },
+  ];
 
   return (
     <>
       <DashboardTopbar />
       <div className="px-6 py-10 md:px-10">
-        <Section
-          heading="Continue Reading"
-          icon="fluent--reading-list-20-filled"
-          items={library}
-          format="ebook"
-          statIcon="akar-icons--eye"
-        />
-        <Section
-          heading="Continue Listening"
-          icon="hugeicons--audio-wave-02"
-          items={library}
-          format="audiobook"
-          statIcon="fluent--headphones-sound-wave-48-filled"
-          className="mt-16"
-        />
+        {library.length === 0 ? (
+          <div>
+            <h2 className="text-4xl font-medium text-black">My Books</h2>
+            <p className="mt-4 text-xl text-black/70">You do not own any books yet.</p>
+            <Link href={BOOK_HREF} className="mt-6 inline-block rounded-[40px] bg-navy px-8 py-3 text-lg font-medium text-cream transition-colors hover:bg-gold">
+              Browse the book
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-3" aria-label="Filter your library">
+              <div className="flex flex-wrap gap-2">
+                {FORMATS.map(([label, f]) => (
+                  <Link key={label} href={href(f, status)} className={chip(f === format)} aria-current={f === format}>
+                    {label}
+                  </Link>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {STATUSES.map(([label, s]) => (
+                  <Link key={label} href={href(format, s)} className={chip(s === status)} aria-current={s === status}>
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {filtered.length === 0 && <p className="mt-10 text-xl text-black/70">Nothing matches those filters.</p>}
+
+            {groups.map(
+              (g) =>
+                g.items.length > 0 && (
+                  <section key={g.heading} className="mt-12">
+                    <h2 className="flex items-center gap-3 text-3xl font-medium text-black md:text-4xl">
+                      {g.heading}
+                      <MaskIcon name={g.icon} size={34} />
+                    </h2>
+                    <div className="mt-6 flex flex-wrap gap-6">
+                      {g.items.map((item, i) => (
+                        <ContinueCard key={item.editionId} href={item.href} title={item.title} author={item.author} cover={item.cover} progressPercent={item.progressPercent} bookmarkCount={item.bookmarkCount} format={item.format} priority={i === 0} />
+                      ))}
+                    </div>
+                  </section>
+                ),
+            )}
+          </>
+        )}
       </div>
     </>
-  );
-}
-
-function Section({
-  heading,
-  icon,
-  items,
-  format,
-  statIcon,
-  className,
-}: {
-  heading: string;
-  icon: string;
-  items: LibraryItem[];
-  format: LibraryFormat;
-  statIcon: string;
-  className?: string;
-}): ReactNode {
-  const filtered = items.filter((i) => i.format === format);
-  if (filtered.length === 0) return null;
-
-  return (
-    <section className={className}>
-      <h2 className="flex items-center gap-3 text-4xl font-medium text-black">
-        {heading}
-        <MaskIcon name={icon} size={36} />
-      </h2>
-      <div className="mt-6 flex gap-6 overflow-x-auto pb-2">
-        {filtered.map((item, i) => {
-          const book = findBookBySlug(item.bookSlug);
-          if (!book) return null;
-          const bookmarkCount = listBookmarks(CURRENT_USER_ID, item.editionId).length;
-
-          return (
-            <ContinueCard
-              key={item.id}
-              slug={item.bookSlug}
-              editionId={item.editionId}
-              chapterIdx={item.currentChapterIdx}
-              title={book.title}
-              author={book.author}
-              cover={book.cover}
-              rating={book.rating}
-              statIcon={statIcon}
-              statCount={book.reviewCount}
-              bookmarkCount={bookmarkCount}
-              progressPercent={item.progressPercent}
-              variant={format === "ebook" ? "reading" : "listening"}
-              priority={i === 0}
-            />
-          );
-        })}
-      </div>
-    </section>
   );
 }

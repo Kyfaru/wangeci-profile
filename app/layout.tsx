@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
+import { SITE, SITE_TITLE } from "@/lib/site";
 import { aeonik, wayfindingSans } from "./fonts";
 import { AppProviders } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Felister Wangechi Kariuki",
-  description:
-    "Author and entrepreneur platform for Felister \"Wangechi\" Kariuki, home of \"From Pieces To Power\".",
+  metadataBase: new URL(SITE.url),
+  title: { default: SITE_TITLE, template: `%s | ${SITE.authorName}` },
+  description: SITE.description,
+  alternates: { canonical: "/" },
+  openGraph: { siteName: SITE.authorName, type: "website", locale: "en_KE" },
+  // Only the production domain is indexed (staging and previews are noindex).
+  robots: SITE.isProduction ? undefined : { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -1,82 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MOCK_BOOKS } from "@/lib/mock-books";
-import { MOCK_BLOG_POSTS } from "@/lib/mock-blog";
-import { MOCK_BUSINESSES } from "@/lib/mock-businesses";
+import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
-type SearchResultType = "book" | "blog" | "business";
+export const dynamic = "force-dynamic";
 
-interface SearchResult {
-  type: SearchResultType;
-  id: string;
-  title: string;
-  snippet: string;
-  url: string;
-  image?: string;
-}
-
-function matches(haystack: string, query: string): boolean {
-  return haystack.toLowerCase().includes(query);
-}
-
-/**
- * GET /api/search?q=
- *
- * Naive case-insensitive substring match across books, blog posts, and
- * businesses — plenty for local UI development. A real implementation is
- * Meilisearch per the System Connections Doc; this mock exists only so the
- * search UI has something to call while that's built.
- */
+/** GET /api/search?q= : books only (title or description). Pages for other content are searched when they exist. */
 export async function GET(request: NextRequest) {
-  const q = (request.nextUrl.searchParams.get("q") ?? "").trim();
+  const q = (request.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 80);
+  if (!q) return NextResponse.json({ query: q, results: [], total: 0 });
 
-  if (!q) {
-    return NextResponse.json({ query: q, results: [], total: 0 });
-  }
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (!(await rateLimit(`search:${ip}`, 60, "1 m")).ok) return NextResponse.json({ error: "Too many searches" }, { status: 429 });
 
-  const needle = q.toLowerCase();
-  const results: SearchResult[] = [];
+  const works = await prisma.work.findMany({
+    where: {
+      editions: { some: { isActive: true, format: { in: ["EPUB", "AUDIOBOOK"] } } },
+      OR: [{ title: { contains: q, mode: "insensitive" } }, { description: { contains: q, mode: "insensitive" } }],
+    },
+    select: { slug: true, title: true, description: true },
+    take: 10,
+  });
 
-  for (const book of MOCK_BOOKS) {
-    if (matches(book.title, needle) || matches(book.description, needle)) {
-      results.push({
-        type: "book",
-        id: book.slug,
-        title: book.title,
-        snippet: book.description,
-        url: `/books/${book.slug}`,
-        image: book.cover,
-      });
-    }
-  }
-
-  for (const post of MOCK_BLOG_POSTS) {
-    if (matches(post.title, needle) || matches(post.excerpt, needle)) {
-      results.push({
-        type: "blog",
-        id: post.slug,
-        title: post.title,
-        snippet: post.excerpt,
-        url: `/blog/${post.slug}`,
-        image: post.coverImage,
-      });
-    }
-  }
-
-  for (const business of MOCK_BUSINESSES) {
-    if (
-      matches(business.name, needle) ||
-      matches(business.description, needle)
-    ) {
-      results.push({
-        type: "business",
-        id: business.slug,
-        title: business.name,
-        snippet: business.description,
-        url: `/businesses/${business.slug}`,
-        image: business.logo,
-      });
-    }
-  }
-
+  const results = works.map((w) => ({ type: "book" as const, id: w.slug, title: w.title, snippet: w.description ?? "", url: `/store/${w.slug}` }));
   return NextResponse.json({ query: q, results, total: results.length });
 }

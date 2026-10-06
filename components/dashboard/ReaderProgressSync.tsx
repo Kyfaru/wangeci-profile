@@ -1,17 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
+
 import { useReaderStore, useReadingProgressSync } from "@/lib/stores/reader-store";
 
-/** Wires the reader page into the already-built position store + sync hook. Renders nothing. */
-export function ReaderProgressSync({ editionId, chapterIdx }: { editionId: string; chapterIdx: number }) {
-  const setPosition = useReaderStore((s) => s.setPosition);
-
-  useEffect(() => {
-    setPosition({ editionId, chapterIdx, scrollPosition: 0, charPosition: 0 });
-  }, [editionId, chapterIdx, setPosition]);
-
+/** Starts the saver while the reader is open and clears the live position when it closes. Renders nothing. */
+export function ReaderProgressSync() {
   useReadingProgressSync();
-
+  useEffect(() => () => useReaderStore.getState().reset(), []);
   return null;
 }

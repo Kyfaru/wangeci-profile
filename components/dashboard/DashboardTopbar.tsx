@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { MaskIcon } from "@/components/ui/MaskIcon";
 import { NAVBAR_LINKS } from "@/lib/content/landing";
 
@@ -30,6 +31,9 @@ export function DashboardTopbar() {
             </Link>
           </li>
         ))}
+        <li>
+          <NotificationBell />
+        </li>
       </ul>
     </div>
   );

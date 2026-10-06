@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
+import { SessionBootstrap } from "@/components/auth/SessionBootstrap";
 import { ToastProvider } from "@/components/toast/ToastProvider";
 
 /**
@@ -41,7 +42,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     // reducedMotion="user": motion drops transform/layout animation for users who ask for less.
     <MotionConfig reducedMotion="user">
       <QueryClientProvider client={queryClient}>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <SessionBootstrap />
+          {children}
+        </ToastProvider>
       </QueryClientProvider>
     </MotionConfig>
   );

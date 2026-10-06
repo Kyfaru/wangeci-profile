@@ -1,54 +1,40 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-interface ReadingProgressPayload {
-  editionId: string;
-  chapterIdx: number;
-  scrollPosition?: number;
-  charPosition?: number;
-  timestamp?: number;
-}
+import { rateLimit } from "@/lib/rate-limit";
+import { saveProgress } from "@/lib/reading/progress";
+import { getSession } from "@/lib/server/session";
 
-function isValidPayload(value: unknown): value is ReadingProgressPayload {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return typeof v.editionId === "string" && typeof v.chapterIdx === "number";
-}
+export const dynamic = "force-dynamic";
+
+const bodySchema = z.object({
+  editionId: z.string().min(1).max(64),
+  chapterIdx: z.number().int().min(0).max(9999),
+  // Word offset (text) or whole seconds (audio).
+  offset: z.number().min(0).max(10_000_000),
+});
 
 /**
- * POST /api/reading/progress
- *
- * Accepts `navigator.sendBeacon` payloads, which are sent as `text/plain`
- * or an opaque Blob (never `application/json`) and carry no auth header —
- * this endpoint is intentionally lenient on both. No session is required:
- * a real implementation would likely associate progress with a session
- * cookie when present and no-op (or queue) otherwise, but that's a judgment
- * call left to the real backend since sendBeacon requests can arrive after
- * the tab (and its ability to attach fresh headers) is already closing.
+ * POST /api/reading/progress : saves the reader's place. Signed in, owns the book, rate limited.
+ * Accepts the body as text so navigator.sendBeacon (which cannot set JSON headers) works on tab close.
  */
 export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   let raw: unknown;
-
   try {
-    // sendBeacon bodies arrive as text regardless of the Blob's declared
-    // type, so always read as text first and parse manually rather than
-    // relying on request.json() (which is strict about Content-Type).
-    const text = await request.text();
-    raw = text ? JSON.parse(text) : null;
+    raw = JSON.parse(await request.text());
   } catch {
-    return NextResponse.json(
-      { error: "Body must be JSON (as text/plain or a JSON blob)" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Body must be JSON" }, { status: 400 });
   }
+  const parsed = bodySchema.safeParse(raw);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  if (!isValidPayload(raw)) {
-    return NextResponse.json(
-      { error: "editionId (string) and chapterIdx (number) are required" },
-      { status: 400 }
-    );
-  }
+  if (!(await rateLimit(`progress:${session.user.id}`, 40, "1 m")).ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
-  // Mock: nowhere to persist this yet (no session-scoped progress store).
-  // Real backend will upsert reading progress keyed by user + edition.
+  const result = await saveProgress({ userId: session.user.id, ...parsed.data, offset: Math.floor(parsed.data.offset) });
+  if (result === "forbidden") return NextResponse.json({ error: "Not found" }, { status: 404 }); // do not reveal what exists
+  if (result === "invalid") return NextResponse.json({ error: "Invalid chapter" }, { status: 400 });
   return NextResponse.json({ ok: true, savedAt: new Date().toISOString() });
 }

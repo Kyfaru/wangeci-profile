@@ -22,6 +22,8 @@ export interface SendEmailParams {
    * the notification log and the Resend webhook handler filter by type. */
   purpose: string;
   from?: string;
+  /** Files to attach (for example the invoice PDF). */
+  attachments?: { filename: string; content: Buffer }[];
 }
 
 /** Thrown when Resend rejects or fails to send an email. The notification_log
@@ -56,6 +58,7 @@ export async function sendEmail({
   userId,
   purpose,
   from,
+  attachments,
 }: SendEmailParams): Promise<{ id: string }> {
   const log = await prisma.notificationLog.create({
     data: {
@@ -72,6 +75,7 @@ export async function sendEmail({
     to,
     subject,
     react,
+    attachments,
   });
 
   if (error || !data) {

@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSessionUserId } from "@/lib/server/mock-auth";
-import { getUnreadCountForUser } from "@/lib/mock-notifications";
 
-/**
- * GET /api/notifications/unread-count
- * Requires a session; a lightweight endpoint for a notification-bell badge
- * that can be polled more cheaply than the full notifications list.
- */
+import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/server/session";
+
+export const dynamic = "force-dynamic";
+
+/** GET /api/notifications/unread-count : cheap count for the bell (polled every 60 seconds). */
 export async function GET() {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  return NextResponse.json({ count: getUnreadCountForUser(userId) });
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const count = await prisma.notificationLog.count({ where: { userId: session.user.id, channel: "IN_APP", readAt: null } });
+  return NextResponse.json({ count }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -36,6 +36,27 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Roles: "reader" (default), "owner", "support", "editor". The permission table lives in
+  // lib/permissions.ts; this column is the only source of truth for who has which role.
+  role                String    @default("reader")
+  banned              Boolean   @default(false)
+  banReason           String?
+  banExpires          DateTime?
+  // Touched at most every few minutes (never on every request); feeds "online now".
+  lastSeenAt          DateTime?
+  // Better Auth phoneNumber plugin.
+  phoneNumber         String?   @unique
+  phoneNumberVerified Boolean   @default(false)
+  // Better Auth twoFactor plugin.
+  twoFactorEnabled    Boolean   @default(false)
+
+  twoFactors       TwoFactor[]
+  devices          UserDevice[]
+  activityEvents   ActivityEvent[]
+  bookmarks        Bookmark[]
+  comments         Comment[]
+  feedback         Feedback[]
+  auditLogs        AuditLog[]
   sessions         Session[]
   accounts         Account[]
   cart             Cart?
@@ -49,13 +70,20 @@ model User {
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  expiresAt DateTime
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  token               String    @unique
+  expiresAt           DateTime
+  ipAddress           String?
+  userAgent           String?
+  // Set by the admin plugin if impersonation is ever used (it stays disabled).
+  impersonatedBy      String?
+  // The browser's server-issued device id (cookie), recorded when the session starts.
+  deviceId            String?
+  // Set when this session has passed the authenticator-app (two-step) check. For accounts with two-step
+  // on, a session where this is still empty gets nothing.
+  twoFactorVerifiedAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -144,15 +172,19 @@ model Work {
 }
 
 model Edition {
-  id        String        @id @default(cuid())
-  format    EditionFormat
-  price     Decimal       @db.Decimal(10, 2)
-  currency  String        @default("KES")
+  id              String        @id @default(cuid())
+  format          EditionFormat
+  title           String?
+  narrator        String?
+  // Total audio length for AUDIOBOOK editions.
+  durationSeconds Int?
+  price           Decimal       @db.Decimal(10, 2)
+  currency        String        @default("KES")
   // Editions are deactivated (not deleted) once orders reference them, so
   // purchase history keeps a valid foreign key.
-  isActive  Boolean       @default(true)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   workId String
   work   Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
@@ -163,6 +195,9 @@ model Edition {
   orderItems       OrderItem[]
   entitlements     Entitlement[]
   readingPositions ReadingPosition[]
+  chapters         Chapter[]
+  bookmarks        Bookmark[]
+  feedback         Feedback[]
 
   @@index([workId])
   @@map("edition")
@@ -214,11 +249,17 @@ model BookPreview {
 // 3. Commerce
 // ---------------------------------------------------------------------------
 
+enum PaymentProvider {
+  PAYSTACK
+  MPESA
+}
+
 enum OrderStatus {
   PENDING
   PAID
   FAILED
   REFUNDED
+  EXPIRED
 }
 
 model Cart {
@@ -258,23 +299,49 @@ model CartItem {
 }
 
 model Order {
-  id                String      @id @default(cuid())
-  status            OrderStatus @default(PENDING)
-  totalAmount       Decimal     @db.Decimal(10, 2)
-  currency          String      @default("KES")
-  // Nullable until a Paystack transaction is initiated for this order (an
-  // Order row is created PENDING first, then the reference is attached once
-  // Paystack returns one). @unique on Postgres permits multiple NULLs, so
-  // many not-yet-initiated orders can coexist.
-  paystackReference String?     @unique
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id                  String           @id @default(cuid())
+  status              OrderStatus      @default(PENDING)
+  totalAmount         Decimal          @db.Decimal(10, 2)
+  currency            String           @default("KES")
+  // Which provider is collecting the money. Null until the order is handed to a provider.
+  provider            PaymentProvider?
+  // The provider's id for this payment: our generated reference for Paystack, the CheckoutRequestID
+  // for M-Pesa. Unique, and Postgres allows many NULLs, so unstarted orders can coexist.
+  providerReference   String?          @unique
+  // M-Pesa (Daraja) details.
+  merchantRequestId   String?
+  mpesaReceipt        String?          @unique
+  payerPhone          String?
+  paidAt              DateTime?
+  failureReason       String?
+  // Admin who asked for the refund (audit trail); set together with refundRequestedAt.
+  refundRequestedById String?
+  // Set when an admin asks the provider for a refund. The order only becomes REFUNDED when the
+  // signed refund event arrives; this lets the UI show "refund pending" without a new status.
+  refundRequestedAt   DateTime?
+  // totalAmount (above) is what the buyer PAYS: subtotal - discount + fees. The parts are kept so the
+  // receipt, the invoice and the admin can show how the total was made.
+  subtotalAmount      Decimal          @default(0) @db.Decimal(10, 2)
+  discountAmount      Decimal          @default(0) @db.Decimal(10, 2)
+  feeAmount           Decimal          @default(0) @db.Decimal(10, 2)
+  // Sequential invoice number, given when the order is paid (INV-2026-000123).
+  invoiceNumber       String?          @unique
+  // Guest checkout: true when this order created the buyer's account. The device that paid may claim
+  // one session for that account, once, using a secret only that device holds (stored hashed).
+  accountCreated      Boolean          @default(false)
+  claimTokenHash      String?
+  claimedAt           DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   // Restrict, not Cascade: an order is a financial record and must outlive
   // the user row (e.g. for accounting/refunds) even if the account is
   // later deleted. Account deletion flows must handle this explicitly.
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  couponId String?
+  coupon   Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
 
   items        OrderItem[]
   entitlements Entitlement[]
@@ -382,6 +449,7 @@ model UserPreferences {
 enum NotificationChannel {
   EMAIL
   SMS
+  IN_APP
 }
 
 enum NotificationStatus {
@@ -409,6 +477,13 @@ model NotificationLog {
   // for this webhook's exact-match hot path. Postgres permits multiple
   // NULLs under @unique, so many not-yet-sent QUEUED rows can coexist.
   providerId String?             @unique
+  // In-app (bell) notifications use these; email and SMS rows leave them null.
+  title      String?
+  body       String?
+  link       String?
+  readAt     DateTime?
+  // Makes repeated webhooks and retries idempotent: one row per (user, dedupeKey).
+  dedupeKey  String?
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
@@ -417,6 +492,214 @@ model NotificationLog {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, dedupeKey])
   @@index([userId])
+  @@index([channel, createdAt])
   @@map("notification_log")
+}
+
+// ---------------------------------------------------------------------------
+// 6. Reader content, bookmarks
+// ---------------------------------------------------------------------------
+
+// One row per chapter. EPUB/text editions keep the text in `body`; AUDIOBOOK chapters point at their
+// audio Asset (an uploaded 192-320 kbps file) and a duration. `isFreePreview` chapters are the
+// only ones the public preview route can ever return.
+model Chapter {
+  id              String   @id @default(cuid())
+  idx             Int
+  title           String
+  wordCount       Int      @default(0)
+  isFreePreview   Boolean  @default(false)
+  body            String?  @db.Text
+  durationSeconds Int?
+  assetId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  editionId String
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@unique([editionId, idx])
+  @@map("chapter")
+}
+
+model Bookmark {
+  id         String   @id @default(cuid())
+  chapterIdx Int
+  // Word offset inside the chapter (device independent), or seconds for audio.
+  position   Int      @default(0)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  editionId String
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, editionId, chapterIdx, position])
+  @@index([editionId])
+  @@map("bookmark")
+}
+
+// ---------------------------------------------------------------------------
+// 7. Auth support: two-factor, devices, activity
+// ---------------------------------------------------------------------------
+
+// Better Auth twoFactor plugin table (field names are fixed by the plugin).
+model TwoFactor {
+  id                      String    @id @default(cuid())
+  secret                  String
+  backupCodes             String
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0)
+  lockedUntil             DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("two_factor")
+}
+
+// A browser we have seen for a user. deviceId is a random id from a server-issued cookie,
+// not a fingerprint (no canvas or font probing: that would be extra personal data).
+model UserDevice {
+  id          String   @id @default(cuid())
+  deviceId    String
+  label       String?
+  lastIpHash  String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@map("user_device")
+}
+
+// First-party security and activity log (sign-ins, lockouts, device changes, 2FA changes).
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  type      String
+  metadata  Json?
+  visitorId String?
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("activity_event")
+}
+
+// ---------------------------------------------------------------------------
+// 8. Comments, feedback, audit
+// ---------------------------------------------------------------------------
+
+enum CommentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SPAM
+  HIDDEN
+}
+
+enum FeedbackStatus {
+  NEW
+  READ
+  ACTIONED
+}
+
+model Comment {
+  id            String        @id @default(cuid())
+  postSlug      String
+  body          String        @db.Text
+  status        CommentStatus @default(PENDING)
+  moderatedById String?
+  moderatedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([postSlug, status])
+  @@index([userId])
+  @@map("comment")
+}
+
+model Feedback {
+  id        String         @id @default(cuid())
+  page      String
+  rating    Int?
+  message   String         @db.Text
+  status    FeedbackStatus @default(NEW)
+  createdAt DateTime       @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  editionId String?
+  edition   Edition? @relation(fields: [editionId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("feedback")
+}
+
+// Every admin write leaves a row here. adminId is RESTRICT so an admin with history cannot be deleted.
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  targetType String
+  targetId   String
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  adminId String
+  admin   User   @relation(fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([adminId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_log")
+}
+
+// ---------------------------------------------------------------------------
+// 9. Coupons
+// ---------------------------------------------------------------------------
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+// A discount code. The server validates and applies it; the browser only sends the code text.
+model Coupon {
+  id             String     @id @default(cuid())
+  // Stored upper-case; matched case-insensitively.
+  code           String     @unique
+  description    String?
+  type           CouponType
+  // PERCENT: 1 to 100. FIXED: an amount in KES.
+  value          Decimal    @db.Decimal(10, 2)
+  minSubtotal    Decimal?   @db.Decimal(10, 2)
+  maxRedemptions Int?
+  // Counted when an order is PAID (pending orders in the last 30 minutes are counted too, when checking).
+  timesRedeemed  Int        @default(0)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  orders Order[]
+
+  @@map("coupon")
 }
