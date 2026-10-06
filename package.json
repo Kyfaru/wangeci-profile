@@ -50,7 +50,7 @@
   "devDependencies": {
     "@iconify-json/ic": "^1.2.4",
     "@iconify-json/logos": "^1.2.13",
-    "@iconify-json/lucide": "^1.2.126",
+    "@iconify-json/lucide": "^1.2.139",
     "@iconify-json/solar": "^1.2.9",
     "@iconify-json/tabler": "^1.2.38",
     "@tailwindcss/forms": "^0.5.11",
