@@ -48,8 +48,9 @@ export async function rateLimit(key: string, limit: number, window: Window): Pro
     return { ok: res.success, retryAfter: res.success ? 0 : Math.max(1, Math.ceil((res.reset - Date.now()) / 1000)) };
   }
 
-  if (process.env.NODE_ENV === "production") {
-    // ponytail: env.ts already refuses to boot without Upstash in production; this is the second lock.
+  if (process.env.NEXT_PUBLIC_SITE_ENV === "production") {
+    // ponytail: env.ts already refuses to boot without Upstash on the real production site; this is the second lock.
+    // Staging falls back to per-process memory below (weak on serverless, fine for testing).
     throw new Error("Rate limiting is not configured (UPSTASH_REDIS_REST_URL / TOKEN)");
   }
 

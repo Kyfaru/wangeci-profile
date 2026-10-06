@@ -117,8 +117,10 @@ const envSchema = z.object({
   // Comma-separated list of emails allowed into the admin panel
   ADMIN_EMAIL_ALLOWLIST: z.string().min(1),
 }).superRefine((value, ctx) => {
-  // Fail fast at boot in production rather than on the first request that needs the value.
-  if (value.NODE_ENV !== "production") return;
+  // Fail fast at boot on the REAL production site rather than on the first request that needs the value.
+  // Staging (Vercel) also runs with NODE_ENV=production, so it is told apart by NEXT_PUBLIC_SITE_ENV: staging may boot without
+  // the launch-only services (Upstash, QStash, Daraja, Turnstile...) and falls back to in-memory limits.
+  if (value.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_SITE_ENV !== "production") return;
   for (const key of [
     "UPSTASH_REDIS_REST_URL",
     "UPSTASH_REDIS_REST_TOKEN",

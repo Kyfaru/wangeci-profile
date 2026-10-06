@@ -52,7 +52,7 @@ export function getKv(): Kv {
     const url = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (url && token) globalForKv.__kv = redisKv(new Redis({ url, token }));
-    else if (process.env.NODE_ENV === "production") throw new Error("Upstash Redis is not configured");
+    else if (process.env.NEXT_PUBLIC_SITE_ENV === "production") throw new Error("Upstash Redis is not configured");
     else globalForKv.__kv = memoryKv();
   }
   return globalForKv.__kv;
