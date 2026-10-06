@@ -52,10 +52,19 @@ const envSchema = z.object({
   AT_API_KEY: z.string().min(1),
   AT_SENDER_ID: z.string().max(11, "AT_SENDER_ID must be at most 11 characters"),
 
-  // ElevenLabs (audiobook narration/voice)
-  ELEVENLABS_API_KEY: z
-    .string()
-    .startsWith("sk_", "ELEVENLABS_API_KEY must start with sk_"),
+  // Audio is uploaded as finished files (no text-to-speech), so there is no ElevenLabs key.
+
+  // Origins allowed to call the auth endpoints, besides BETTER_AUTH_URL.
+  // Comma-separated (e.g. the staging domain). localhost is added only in development.
+  TRUSTED_ORIGINS: z.string().optional(),
+
+  // Upstash Redis (rate limits). Required in production, optional locally.
+  UPSTASH_REDIS_REST_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
+  UPSTASH_REDIS_REST_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // Africa's Talking does not sign delivery reports, so the callback URL carries this secret
+  // (?token=...). Required in production.
+  AT_WEBHOOK_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(24).optional()),
 
   // Sentry — optional until a later agent wires up error monitoring.
   // Empty-string env vars (common when a platform sets an unfilled
@@ -72,11 +81,21 @@ const envSchema = z.object({
 
   // Comma-separated list of emails allowed into the admin panel
   ADMIN_EMAIL_ALLOWLIST: z.string().min(1),
+}).superRefine((value, ctx) => {
+  // Fail fast at boot in production rather than on the first request that needs the value.
+  if (value.NODE_ENV !== "production") return;
+  for (const key of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "AT_WEBHOOK_TOKEN"] as const) {
+    if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required in production` });
+  }
 });
 
-// Parsing at import time (rather than lazily on first use) means a bad
-// deploy fails at boot, not on the first request that happens to touch
-// the missing var — fail fast and loud instead of intermittently.
-export const env = envSchema.parse(process.env);
+// Parsed on first import. `instrumentation.ts` imports this at server start in
+// production, so a bad deploy fails at boot (not on the first request).
+// `next build` imports route modules to read their config but has no secrets (Docker/CI), so
+// validation is skipped for that phase only. Nothing reads these values during the build.
+export const env: z.infer<typeof envSchema> =
+  process.env.NEXT_PHASE === "phase-production-build"
+    ? (process.env as unknown as z.infer<typeof envSchema>)
+    : envSchema.parse(process.env);
 
 export type Env = z.infer<typeof envSchema>;

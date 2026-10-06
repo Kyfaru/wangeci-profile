@@ -3,41 +3,61 @@ import type { NextRequest } from "next/server";
 
 import { getSessionCookie } from "better-auth/cookies";
 
-// Route prefixes that require a signed-in session. Add new protected
-// sections here — and mirror the change in `config.matcher` below, since
-// Next.js requires matcher values to be static string literals (not derived
-// from this array) for build-time analysis.
-const PROTECTED_PREFIXES = ["/my-books", "/account"];
+// Route prefixes that require a signed-in session. This is only the fast front
+// door (cookie present, no database lookup): every protected page, route
+// handler and server action must re-check the real session on the server.
+const PROTECTED_PREFIXES = ["/dashboard", "/checkout", "/account", "/admin"];
 
-/**
- * Redirects unauthenticated requests away from protected routes.
- * Why it exists: this is an optimistic, cookie-only check (no DB lookup) —
- * Proxy runs on every matched request including prefetches, so it must stay
- * fast. It only proves "a session cookie is present," not that the session
- * is still valid; real authorization happens server-side per route (see
- * Next.js's data-security guidance on not relying on Proxy alone).
- */
+const isDev = process.env.NODE_ENV === "development";
+
+// Content-Security-Policy. REPORT-ONLY for now: it logs violations in the browser console
+// without blocking anything. Phase 6 flips it to enforcing once the pages are clean.
+function buildCsp(nonce: string) {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'", // inline style attributes (React, motion) cannot carry a nonce
+    "img-src 'self' data: blob: https://*.r2.dev",
+    "font-src 'self' data:",
+    "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
+    "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-  if (!isProtected) {
-    return NextResponse.next();
-  }
-
-  const sessionCookie = getSessionCookie(request);
-  if (!sessionCookie) {
+  const isProtected = PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  if (isProtected && !getSessionCookie(request)) {
     const signInUrl = new URL("/sign-in", request.url);
     signInUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  return NextResponse.next();
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = buildCsp(nonce);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy-Report-Only", csp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy-Report-Only", csp);
+  return response;
 }
 
 export const config = {
-  // Keep in sync with PROTECTED_PREFIXES above.
-  matcher: ["/my-books/:path*", "/account/:path*"],
+  matcher: [
+    {
+      // Pages only: skip API routes, Next internals and static files, and skip prefetches.
+      source: "/((?!api|_next/static|_next/image|favicon.ico|.*\.(?:png|jpg|jpeg|svg|webp|avif|ico|woff2?)$).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
+  ],
 };

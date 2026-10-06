@@ -64,14 +64,14 @@ export default function VerifyEmail({ url }: VerifyEmailProps) {
             Verify email
           </Button>
           <Text style={{ color: COLOR_NAVY, fontSize: "13px", lineHeight: "20px", margin: "24px 0 0" }}>
-            If the button above doesn't work, copy and paste this link into your
+            If the button above doesn&apos;t work, copy and paste this link into your
             browser:
           </Text>
           <Text style={{ color: COLOR_NAVY, fontSize: "13px", lineHeight: "20px", margin: "4px 0 0", wordBreak: "break-all" }}>
             {url}
           </Text>
           <Text style={{ color: "#6B7280", fontSize: "12px", lineHeight: "18px", margin: "32px 0 0" }}>
-            If you didn't create a Wangeci account, you can safely ignore this email.
+            If you didn&apos;t create a Wangeci account, you can safely ignore this email.
           </Text>
         </Container>
       </Body>

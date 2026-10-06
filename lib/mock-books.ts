@@ -61,12 +61,12 @@ export const MOCK_BOOKS: Book[] = [
     slug: "from-pieces-to-power",
     title: "From Pieces To Power",
     subtitle: "A Memoir of Rebuilding After Everything Fell Apart",
-    author: "Felister \"Wangechi\" Kariuki",
-    cover: "/images/From Pieces to Power Front Cover.png",
+    author: "Wangeci Kariuki",
+    cover: "/images/from-pieces-to-power-front-cover.png",
     description:
       "A raw, unflinching memoir about losing everything and rebuilding a life, a business, and a sense of self from the ground up.",
     longDescription:
-      "When Felister \"Wangechi\" Kariuki lost her marriage, her income, and her sense of direction within the same year, she had two choices: disappear into the wreckage, or use every piece of it to build something new. From Pieces To Power is the story of that rebuild — messy, funny, spiritual, and deeply practical. Part memoir, part field guide for anyone starting over, it follows Wangechi from a single rented room in Nairobi to founding Fechi Organics and becoming a voice for women rebuilding after loss. Readers walk away with not just her story, but the frameworks she used to reclaim her time, her money, and her voice.",
+      "She walked barefoot to school on dusty village roads, raised by siblings barely older than herself. When her mother died, she lost more than a parent: she lost her home, her place in the world.", // TODO(client)
     price: 2000,
     currency: "KES",
     rating: 4.2,
@@ -133,7 +133,7 @@ export const MOCK_BOOKS: Book[] = [
         id: "fptp-audio-v1",
         format: "audiobook",
         label: "Audiobook — narrated by the author",
-        narrator: "Felister \"Wangechi\" Kariuki",
+        narrator: "Wangeci Kariuki",
         chapters: [
           {
             idx: 0,
@@ -185,123 +185,6 @@ export const MOCK_BOOKS: Book[] = [
             isFreePreview: false,
             audioUrl: "/audio/from-pieces-to-power/ch5-epilogue.m4a",
             timingUrl: "/audio/from-pieces-to-power/ch5-epilogue.timing.json",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    slug: "the-shea-ledger",
-    title: "The Shea Ledger",
-    subtitle: "Building a Business on Borrowed Time and Borrowed Money",
-    author: "Felister \"Wangechi\" Kariuki",
-    cover: "/books/the-shea-ledger/cover.jpg",
-    description:
-      "The unglamorous, spreadsheet-level story of turning a kitchen-table skincare line into a real company.",
-    longDescription:
-      "A companion volume to From Pieces To Power, The Shea Ledger goes deep on the operational side of building Fechi Organics: sourcing, pricing, cash flow, and the specific mistakes that nearly closed the business twice in its first eighteen months.",
-    price: 1500,
-    currency: "KES",
-    rating: 4.6,
-    reviewCount: 87,
-    tags: ["entrepreneurship", "small-business", "finance"],
-    publishedAt: "2025-09-01T00:00:00.000Z",
-    editions: [
-      {
-        id: "shea-ledger-ebook-v1",
-        format: "ebook",
-        label: "Ebook Edition",
-        chapters: [
-          {
-            idx: 0,
-            title: "Introduction: The Ledger Doesn't Lie",
-            wordCount: 1100,
-            isFreePreview: true,
-            content:
-              "Every business has a story it tells and a ledger that tells the truth. This book is about the gap between the two, and how I closed it...",
-          },
-          {
-            idx: 1,
-            title: "Chapter 1: Sourcing Shea Without a Supplier",
-            wordCount: 1890,
-            isFreePreview: true,
-            content:
-              "My first shea butter supplier ghosted me two weeks before my first market. Here's what that taught me about vetting cooperatives...",
-          },
-          {
-            idx: 2,
-            title: "Chapter 2: Pricing for Survival, Not Vanity",
-            wordCount: 2005,
-            isFreePreview: false,
-            content:
-              "I built three pricing spreadsheets before I understood that margin isn't a feeling, it's arithmetic...",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    slug: "letters-to-the-woman-rebuilding",
-    title: "Letters to the Woman Rebuilding",
-    author: "Felister \"Wangechi\" Kariuki",
-    cover: "/books/letters-to-the-woman-rebuilding/cover.jpg",
-    description:
-      "A short collection of letters written to readers going through their own rebuild — grief, divorce, job loss, and starting again.",
-    longDescription:
-      "Written in the two years after From Pieces To Power, these letters started as replies to reader emails. Collected here for the first time, they're short enough to read in a single sitting on a hard day.",
-    price: 900,
-    currency: "KES",
-    rating: 4.9,
-    reviewCount: 56,
-    tags: ["memoir", "personal-growth", "grief"],
-    publishedAt: "2026-01-20T00:00:00.000Z",
-    editions: [
-      {
-        id: "letters-ebook-v1",
-        format: "ebook",
-        label: "Ebook Edition",
-        chapters: [
-          {
-            idx: 0,
-            title: "Letter One: To the Woman on the Kitchen Floor",
-            wordCount: 640,
-            isFreePreview: true,
-            content:
-              "I don't know what brought you to the floor today, but I know the floor. I want you to know it's not the ending it feels like...",
-          },
-          {
-            idx: 1,
-            title: "Letter Two: To the Woman Who Hasn't Told Anyone Yet",
-            wordCount: 580,
-            isFreePreview: false,
-            content:
-              "Secrets are heavy in a specific way — they take up the exact amount of room you need for hope...",
-          },
-        ],
-      },
-      {
-        id: "letters-audio-v1",
-        format: "audiobook",
-        label: "Audiobook — narrated by the author",
-        narrator: "Felister \"Wangechi\" Kariuki",
-        chapters: [
-          {
-            idx: 0,
-            title: "Letter One: To the Woman on the Kitchen Floor",
-            durationSeconds: 312,
-            isFreePreview: true,
-            audioUrl: "/audio/letters-to-the-woman-rebuilding/letter1.m4a",
-            timingUrl:
-              "/audio/letters-to-the-woman-rebuilding/letter1.timing.json",
-          },
-          {
-            idx: 1,
-            title: "Letter Two: To the Woman Who Hasn't Told Anyone Yet",
-            durationSeconds: 287,
-            isFreePreview: false,
-            audioUrl: "/audio/letters-to-the-woman-rebuilding/letter2.m4a",
-            timingUrl:
-              "/audio/letters-to-the-woman-rebuilding/letter2.timing.json",
           },
         ],
       },

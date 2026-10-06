@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
-import { getSessionUserId } from "@/lib/server/mock-auth";
-import { getNotificationsForUser } from "@/lib/mock-notifications";
+import { getSessionUserId } from "@/lib/server/session";
 
-/**
- * GET /api/notifications
- * Requires a session; intended to be polled every 60s per the cache table.
- */
+/** GET /api/notifications: signed-in users only. Phase 4 reads IN_APP rows from notification_log. */
 export async function GET() {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const items = getNotificationsForUser(userId);
-  return NextResponse.json({ items, total: items.length });
+  if (!(await getSessionUserId())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return NextResponse.json({ items: [], total: 0 });
 }

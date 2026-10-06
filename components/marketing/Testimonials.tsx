@@ -25,6 +25,9 @@ export function Testimonials() {
 
   const go = (i: number) => setActive((i + total) % total);
 
+  // No invented quotes: the section stays hidden until real testimonials are added.
+  if (total === 0) return null;
+
   return (
     <section
       className="bg-cream px-6 py-20 lg:py-28"

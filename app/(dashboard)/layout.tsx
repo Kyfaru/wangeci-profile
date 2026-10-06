@@ -1,17 +1,19 @@
-import { Sidebar } from "@/components/dashboard/Sidebar";
-import { CURRENT_USER_ID } from "@/lib/dashboard/current-user";
-import { findUserById, toPublicUser } from "@/lib/mock-user";
+import type { Metadata } from "next";
 
-export default function DashboardLayout({ children }: LayoutProps<"/">) {
-  const record = findUserById(CURRENT_USER_ID);
-  if (!record) {
-    // Seed data guarantees this id exists — fail loudly if the fixture ever changes.
-    throw new Error(`Demo user ${CURRENT_USER_ID} not found in MOCK_USERS`);
-  }
+import { Sidebar } from "@/components/dashboard/Sidebar";
+import { requireUser } from "@/lib/server/session";
+
+export const dynamic = "force-dynamic"; // reads the session cookie on every request
+
+export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+export default async function DashboardLayout({ children }: LayoutProps<"/">) {
+  // Second gate (the proxy cookie check is only the front door): validates the real session.
+  const user = await requireUser();
 
   return (
     <div className="flex min-h-screen bg-cream">
-      <Sidebar user={toPublicUser(record)} />
+      <Sidebar user={user} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

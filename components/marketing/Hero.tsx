@@ -11,6 +11,7 @@ import {
 } from "motion/react";
 import { HERO_ROLES } from "@/lib/content/landing";
 import { cn } from "@/lib/cn";
+import { SITE } from "@/lib/site";
 
 const ROLE_INTERVAL_MS = 3200;
 const vertical = "[writing-mode:vertical-rl] rotate-180 whitespace-nowrap";
@@ -83,7 +84,7 @@ export function Hero() {
     >
       {/* Background: photo under a navy wash (Figma: photo at 10% on #0c2142). */}
       <Image
-        src="/images/DSC09752.jpg.jpeg"
+        src="/images/wangeci-author.jpg"
         alt=""
         fill
         preload
@@ -116,8 +117,8 @@ export function Hero() {
         className="absolute bottom-0 left-1/2 z-20 aspect-[1440/1024] h-[60%] -translate-x-[69.8%] wide:left-auto wide:right-0 wide:h-full wide:translate-x-0"
       >
         <Image
-          src="/images/DSC09752.jpg 2.png"
-          alt="Felister Wangeci Kariuki"
+          src="/images/wangeci-cutout.png"
+          alt={`${SITE.authorName}, author of ${SITE.bookTitle}`}
           fill
           preload
           sizes="(min-width: 768px) and (min-aspect-ratio: 6/5) 100vw, 190vw"
@@ -127,14 +128,16 @@ export function Hero() {
 
       {/* Text side */}
       <div className="relative z-30 mt-[5px] w-full px-6 text-center wide:mt-0 wide:w-auto wide:pl-[14.2vw] wide:text-left">
-        <motion.h1
+        <h1 className="sr-only">{SITE.authorName}, author of {SITE.bookTitle}</h1>
+        <motion.p
+          aria-hidden
           initial={{ opacity: 0, x: -60 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.9, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
           className="text-[clamp(5rem,29vw,7rem)] font-light leading-[0.92] tracking-[0.05em] text-gold sm:text-[clamp(7rem,20vw,12rem)] wide:text-[clamp(7rem,15.56vw,18rem)]"
         >
           Hello
-        </motion.h1>
+        </motion.p>
         <motion.p
           initial={{ opacity: 0, x: -40 }}
           animate={{ opacity: 1, x: 0 }}
@@ -142,7 +145,7 @@ export function Hero() {
           aria-live="polite"
           className="mb-[3px] mt-6 flex flex-wrap items-baseline justify-center gap-x-2 text-[clamp(1rem,1.67vw,1.5rem)] tracking-[0.05em] sm:mt-8 sm:text-[clamp(1.125rem,3vw,1.75rem)] wide:mb-0 wide:mt-6 wide:justify-start wide:text-[clamp(1rem,1.67vw,1.5rem)]"
         >
-          <span>— Its Wangeci Kariuki</span>
+          <span>— It’s Wangeci Kariuki,</span>
           <span className="inline-block overflow-hidden align-bottom">
             <AnimatePresence mode="wait" initial={false}>
               <motion.span

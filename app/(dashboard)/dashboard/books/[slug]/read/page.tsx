@@ -5,11 +5,10 @@ import { ReaderActions } from "@/components/dashboard/ReaderActions";
 import { ReaderPager } from "@/components/dashboard/ReaderPager";
 import { ReaderProgressSync } from "@/components/dashboard/ReaderProgressSync";
 import { ReaderRail } from "@/components/dashboard/ReaderRail";
-import { CURRENT_USER_ID } from "@/lib/dashboard/current-user";
 import { BOOK_PREVIEWS, DEFAULT_PREVIEW } from "@/lib/content/book-preview";
 import { findBookBySlug, findEditionById, type ReadingChapter } from "@/lib/mock-books";
-import { getLibraryForUser } from "@/lib/mock-user";
-import { listBookmarks } from "@/lib/server/mock-bookmarks-store";
+import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/server/session";
 
 export async function generateMetadata({ params }: PageProps<"/dashboard/books/[slug]/read">): Promise<Metadata> {
   const book = findBookBySlug((await params).slug);
@@ -19,19 +18,24 @@ export async function generateMetadata({ params }: PageProps<"/dashboard/books/[
 
 /** `/dashboard/books/[slug]/read` — Figma "The Book" frame. */
 export default async function ReaderPage({ params, searchParams }: PageProps<"/dashboard/books/[slug]/read">) {
+  const user = await requireUser();
   const { slug } = await params;
   const sp = await searchParams;
 
   const book = findBookBySlug(slug);
   if (!book) notFound();
 
-  const libraryItem = getLibraryForUser(CURRENT_USER_ID).find((i) => i.bookSlug === slug && i.format === "ebook");
-
   const editionId =
     (typeof sp.editionId === "string" ? sp.editionId : undefined) ??
-    libraryItem?.editionId ??
     book.editions.find((e) => e.format === "ebook")?.id;
   if (!editionId) notFound();
+
+  // The paywall: no entitlement row for this user and edition means no chapter text.
+  const entitlement = await prisma.entitlement.findUnique({
+    where: { userId_editionId: { userId: user.id, editionId } },
+    select: { id: true },
+  });
+  if (!entitlement) notFound();
 
   const found = findEditionById(editionId);
   if (!found || found.edition.format !== "ebook") notFound();
@@ -40,10 +44,10 @@ export default async function ReaderPage({ params, searchParams }: PageProps<"/d
   const totalChapters = chapters.length;
 
   const requestedIdx = typeof sp.idx === "string" ? Number(sp.idx) : NaN;
-  const idx = chapters.some((c) => c.idx === requestedIdx) ? requestedIdx : (libraryItem?.currentChapterIdx ?? 0);
+  const idx = chapters.some((c) => c.idx === requestedIdx) ? requestedIdx : 0;
   const chapter = chapters.find((c) => c.idx === idx) ?? chapters[0];
 
-  const bookmarks = listBookmarks(CURRENT_USER_ID, editionId);
+  const bookmarks: { chapterIdx: number }[] = []; // Phase 4: real Bookmark table
   const preview = BOOK_PREVIEWS[book.slug] ?? DEFAULT_PREVIEW;
 
   return (

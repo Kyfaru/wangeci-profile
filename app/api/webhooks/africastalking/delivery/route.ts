@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
@@ -9,12 +11,18 @@ import type { NotificationStatus } from "@prisma/client";
 // secrets are intentionally absent.
 export const dynamic = "force-dynamic";
 
-// SECURITY NOTE: Africa's Talking does not sign delivery report callbacks —
-// this endpoint is unauthenticated by the provider (unlike Paystack/Resend,
-// there's no secret to verify a request actually came from AT). The only
-// mitigation right now is that this path is obscure/unguessable. Follow-up
-// hardening (not implemented here): IP-allowlist AT's known webhook source
-// IPs at the edge/reverse-proxy.
+// SECURITY NOTE: Africa's Talking does not sign delivery reports, so the callback URL
+// registered in their dashboard carries a secret: /api/webhooks/africastalking/delivery?token=...
+// (AT_WEBHOOK_TOKEN). A wrong or missing token gets a 401. Phase 6 adds an IP allowlist at the proxy.
+
+function hasValidToken(request: Request): boolean {
+  const expected = process.env.AT_WEBHOOK_TOKEN;
+  const given = new URL(request.url).searchParams.get("token");
+  if (!expected || !given) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(given);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 /**
  * Maps an Africa's Talking delivery `status` value to the NotificationLog
@@ -51,6 +59,14 @@ function statusForDeliveryStatus(status: string): NotificationStatus | null {
  * FAILED so the app knows whether the text actually reached the recipient.
  */
 export async function POST(request: Request) {
+  if (!hasValidToken(request)) {
+    console.error("[webhooks/africastalking] bad or missing token");
+    return NextResponse.json(
+      { success: false, error: { code: "AT_UNAUTHORIZED", message: "Unauthorized.", details: {} } },
+      { status: 401 },
+    );
+  }
+
   const form = await request.formData();
 
   const messageId = form.get("id");

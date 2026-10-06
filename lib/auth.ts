@@ -8,10 +8,13 @@ import { sendEmail } from "@/lib/email";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
-// No CORS_TRUSTED_ORIGINS-shaped var exists in lib/env.ts yet, so localhost
-// is hardcoded here rather than inventing a new required env var — flag to
-// the foundation agent if production needs an additional trusted origin.
-const TRUSTED_ORIGINS = ["http://localhost:3000"];
+// Origins that may call the auth endpoints: the app's own base URL, any extra
+// domains from TRUSTED_ORIGINS (e.g. staging), and localhost only in development.
+const TRUSTED_ORIGINS = [
+  env.BETTER_AUTH_URL,
+  ...(env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
+  ...(env.NODE_ENV === "development" ? ["http://localhost:3000"] : []),
+];
 
 /**
  * Better Auth instance — the single source of truth for sessions, sign-up,

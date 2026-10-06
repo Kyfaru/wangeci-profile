@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MOCK_BOOKS } from "@/lib/mock-books";
-import { MOCK_BLOG_POSTS } from "@/lib/mock-blog";
-import { MOCK_BUSINESSES } from "@/lib/mock-businesses";
 
-type SearchResultType = "book" | "blog" | "business";
+type SearchResultType = "book";
 
 interface SearchResult {
   type: SearchResultType;
@@ -43,37 +41,8 @@ export async function GET(request: NextRequest) {
         id: book.slug,
         title: book.title,
         snippet: book.description,
-        url: `/books/${book.slug}`,
+        url: `/store/${book.slug}`,
         image: book.cover,
-      });
-    }
-  }
-
-  for (const post of MOCK_BLOG_POSTS) {
-    if (matches(post.title, needle) || matches(post.excerpt, needle)) {
-      results.push({
-        type: "blog",
-        id: post.slug,
-        title: post.title,
-        snippet: post.excerpt,
-        url: `/blog/${post.slug}`,
-        image: post.coverImage,
-      });
-    }
-  }
-
-  for (const business of MOCK_BUSINESSES) {
-    if (
-      matches(business.name, needle) ||
-      matches(business.description, needle)
-    ) {
-      results.push({
-        type: "business",
-        id: business.slug,
-        title: business.name,
-        snippet: business.description,
-        url: `/businesses/${business.slug}`,
-        image: business.logo,
       });
     }
   }

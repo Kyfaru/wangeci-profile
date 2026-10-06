@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
 import { ABOUT, ABOUT_PANELS } from "@/lib/content/landing";
+import { SITE } from "@/lib/site";
 
 /**
  * About: intro text + a five-panel accordion.
@@ -95,7 +96,7 @@ export function AboutPanels() {
             >
               <Image
                 src={p.image}
-                alt=""
+                alt={`${SITE.authorName}, ${p.label.toLowerCase()}`}
                 fill
                 sizes="(min-width: 1024px) 40vw, 100vw"
                 style={{ objectPosition: p.position }}

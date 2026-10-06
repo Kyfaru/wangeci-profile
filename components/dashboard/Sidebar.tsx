@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MaskIcon } from "@/components/ui/MaskIcon";
 import { cn } from "@/lib/cn";
-import type { MockUser } from "@/lib/mock-user";
 
 /** Only "My Books" has a page today — the rest render inert (Figma: 4 designed frames, only this one built). */
 const NAV_LINKS = [
@@ -53,11 +52,11 @@ function NavRow({
 }
 
 /** Navy → blue gradient sidebar (Figma: "My dashboard" / "The Book" frames, both node ids under fileKey ZhDSoJk2pmyzQ2AsOYAM1m). */
-export function Sidebar({ user }: { user: MockUser }) {
+export function Sidebar({ user }: { user: { name: string } }) {
   const pathname = usePathname();
   const booksActive = pathname.startsWith("/dashboard/books");
 
-  const [firstName, ...rest] = user.name.split(" ");
+  const [firstName = "?", ...rest] = user.name.trim().split(/\s+/);
   const lastInitial = rest.at(-1)?.[0];
   const initials = `${firstName[0]}${lastInitial ?? ""}`.toUpperCase();
 

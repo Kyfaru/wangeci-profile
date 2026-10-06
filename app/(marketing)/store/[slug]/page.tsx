@@ -3,7 +3,6 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { BookToc } from "@/components/store/BookToc";
 import { BuyButtons } from "@/components/store/BuyButtons";
-import { MaskIcon } from "@/components/ui/MaskIcon";
 import { BOOK_PREVIEWS, DEFAULT_PREVIEW } from "@/lib/content/book-preview";
 import { findBookBySlug, MOCK_BOOKS } from "@/lib/mock-books";
 
@@ -14,14 +13,8 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps<"/store/[slug]">): Promise<Metadata> {
   const book = findBookBySlug((await params).slug);
   if (!book) return {};
-  return { title: `${book.title} — Felister Wangechi Kariuki`, description: book.description };
+  return { title: book.title, description: book.description, alternates: { canonical: `/store/${book.slug}` } };
 }
-
-// Chips are sized in em and the row's font-size follows the width of its column (cqw, capped at
-// the Figma 13px), so the whole chip - height, padding, icon, gaps - scales together and the
-// duration + rating chips stay on one row from very small phones up.
-const chip = "flex h-[3.2em] items-center gap-[0.9em] rounded-full bg-white/15 px-[0.85em] font-medium text-white";
-const chipIcon = "1.9em";
 
 /** `/store/[slug]` — Book Preview (Figma "Book Preview" frame). */
 export default async function BookPreviewPage({ params }: PageProps<"/store/[slug]">) {
@@ -62,29 +55,9 @@ export default async function BookPreviewPage({ params }: PageProps<"/store/[slu
           <div className="@container min-w-0 text-center lg:text-left">
             <p className="text-xl font-medium text-[#989898] md:text-2xl">{book.author}</p>
             {/* mb: 54px visible gap to the chips (same as chips -> buttons); 0.125em is the empty space under the letters inside the line box. */}
-            <h1 className="mb-[calc(54px_-_0.125em)] mt-5 font-display text-[clamp(2.5rem,13.5vw,3.25rem)] font-normal md:text-[clamp(4rem,9vw,6rem)] lg:text-[min(6rem,18.5cqw)] leading-[0.92] tracking-[-0.02em] text-white">
+            <h1 className="mt-5 font-display text-[clamp(2.5rem,13.5vw,3.25rem)] font-normal md:text-[clamp(4rem,9vw,6rem)] lg:text-[min(6rem,18.5cqw)] leading-[0.92] tracking-[-0.02em] text-white">
               {book.title}
             </h1>
-
-            <div className="flex flex-wrap items-center justify-center gap-[0.9em] text-[clamp(9px,3.4cqw,13px)] lg:justify-start">
-              {(preview.readTime || preview.audioTime) && (
-                <div className={chip}>
-                  <MaskIcon name="carbon--time-filled" size={chipIcon} />
-                  <span className="flex items-center gap-[0.9em]">
-                    {preview.readTime}
-                    {preview.readTime && preview.audioTime && (
-                      // eslint-disable-next-line @next/next/no-img-element -- decorative SVG from Figma
-                      <img src="/images/book-preview/line-2.svg" alt="" width={7} height={1} />
-                    )}
-                    {preview.audioTime}
-                  </span>
-                </div>
-              )}
-              <div className={`${chip} pr-[1.3em]`}>
-                <MaskIcon name="ic--baseline-star-rate" size={chipIcon} className="text-gold-bright" />
-                {book.rating} Rating
-              </div>
-            </div>
 
             <div className="mt-[54px]">
               <BuyButtons

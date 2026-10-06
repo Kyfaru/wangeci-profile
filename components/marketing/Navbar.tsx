@@ -203,7 +203,7 @@ export function Navbar() {
                       aria-label="From Pieces To Power"
                       className={cn("hidden min-[390px]:block", wide ? "w-full max-w-[9.5rem]" : "w-[6.5rem]")}
                     >
-                      <Image src={BOOK.cover} alt="" width={152} height={215} className="h-auto w-full rounded-lg object-cover shadow-md" />
+                      <Image src={BOOK.cover} alt={`${BOOK.titleTop} ${BOOK.titleBottom} ${BOOK.accent} book cover`} width={152} height={215} className="h-auto w-full rounded-lg object-cover shadow-md" />
                     </Link>
                     <FillButton href={BOOK_HREF} className={cn("w-full text-center", wide ? "px-4! py-2! text-sm!" : "px-2.5! py-2! text-xs!")}>
                       Get My Book
