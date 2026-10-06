@@ -52,7 +52,7 @@
     "@iconify-json/logos": "^1.2.13",
     "@iconify-json/lucide": "^1.2.126",
     "@iconify-json/solar": "^1.2.9",
-    "@iconify-json/tabler": "^1.2.38",
+    "@iconify-json/tabler": "^1.2.41",
     "@tailwindcss/forms": "^0.5.11",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
