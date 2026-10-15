@@ -6,6 +6,7 @@ import { z } from "zod";
 import { supportBridge } from "@/lib/support-bridge";
 import { rateLimit } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { api, logError } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ const bodySchema = z.object({
 });
 
 /** POST /api/contact: the public contact form. Validated, bot-checked, rate-limited, then handed to the SupportBridge. */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
@@ -42,8 +43,10 @@ export async function POST(request: Request) {
   try {
     await supportBridge.submit({ id: randomUUID(), name: data.name, email: data.email, message: data.message, source: data.source });
   } catch (error) {
-    console.error("[contact] submit failed", error);
+    logError("contact.submit", error);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
 }
+
+export const POST = api("contact.post", handlePOST);

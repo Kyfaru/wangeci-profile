@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logError } from "@/lib/trace";
 import { headers } from "next/headers";
 import { z } from "zod";
 
@@ -41,7 +42,7 @@ async function run(permission: Action, change: (actor: Actor) => Promise<string>
   } catch (error) {
     if (error instanceof AdminError) return { ok: false, message: error.message };
     if (error instanceof z.ZodError) return { ok: false, message: error.issues[0]?.message ?? "Please check the form." };
-    console.error("[admin action] failed", error);
+    logError(`admin.${permission}`, error, { adminId: check.user.id });
     return { ok: false, message: "Something went wrong. Nothing was changed." };
   }
 }

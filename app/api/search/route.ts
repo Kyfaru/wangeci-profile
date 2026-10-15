@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/search?q= : books only (title or description). Pages for other content are searched when they exist. */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const q = (request.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 80);
   if (!q) return NextResponse.json({ query: q, results: [], total: 0 });
 
@@ -24,3 +25,5 @@ export async function GET(request: NextRequest) {
   const results = works.map((w) => ({ type: "book" as const, id: w.slug, title: w.title, snippet: w.description ?? "", url: `/store/${w.slug}` }));
   return NextResponse.json({ query: q, results, total: results.length });
 }
+
+export const GET = api("search.get", handleGET);

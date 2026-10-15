@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -16,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/server/session";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { api, logError } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +42,7 @@ const retryMessage = (seconds: number, support: boolean) =>
  * the retry ladder, then the account and the order. A guest NEVER gets a session here: the existing-account
  * case would be an account takeover, and a new account claims its session only after the payment is confirmed.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const ip = clientIp(request);
   if (!(await rateLimit(`checkout:ip:${ip}`, 30, "1 h")).ok) return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
 
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
   if (free) {
     // A 100% coupon: nothing to collect, so grant right away through the same single-writer function.
     const granted = await prisma.$transaction((tx) => markOrderPaid(order.id, {}, tx));
-    if (granted) await afterOrderPaid(order.id).catch((e) => console.error("[checkout] post-payment steps failed", e));
+    if (granted) await afterOrderPaid(order.id).catch((e) => logError("checkout.post-paid", e, { orderId: order.id }));
     return NextResponse.json({ orderId: order.id, free: true, method, claimToken: claim?.token ?? null, accountCreated: buyer.accountCreated });
   }
 
@@ -146,9 +146,10 @@ export async function POST(request: Request) {
       publicKey: method === "card" ? env.PAYSTACK_PUBLIC_KEY : undefined,
     });
   } catch (error) {
-    console.error("[checkout] provider initialize failed", error);
-    Sentry.captureException(error);
+    logError("checkout.provider-init", error, { orderId: order.id, provider: providerId });
     await prisma.order.updateMany({ where: { id: order.id, status: "PENDING" }, data: { status: "FAILED", failureReason: "provider_initialize_failed" } });
     return NextResponse.json({ error: "We could not start the payment. Nothing was charged. Please try again." }, { status: 502 });
   }
 }
+
+export const POST = api("checkout.post", handlePOST);

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/server/notifier";
 import { notifyAdmins } from "@/lib/server/notify-admins";
 import { sendSms } from "@/lib/sms";
+import { logError } from "@/lib/trace";
 import { orderWelcome } from "@/lib/sms-templates";
 import { SITE } from "@/lib/site";
 
@@ -45,7 +46,7 @@ export async function invoiceForOrder(orderId: string) {
  */
 export async function afterOrderPaid(orderId: string): Promise<void> {
   const built = await invoiceForOrder(orderId).catch((error) => {
-    console.error("[post-paid] invoice failed", error);
+    logError("post-paid.invoice", error, { orderId });
     return null;
   });
   const order = built?.order ?? (await prisma.order.findUnique({ where: { id: orderId }, include: { user: true, coupon: { select: { code: true } }, items: { include: { edition: { include: { work: true } } } } } }));
@@ -71,5 +72,5 @@ export async function afterOrderPaid(orderId: string): Promise<void> {
     notifyAdmins({ type: "order_paid", title: "New paid order", body: `${titles.join(", ")} for ${total}${order.accountCreated ? " (new customer)" : ""}`, link: `/admin/sales/${order.id}`, dedupeKey: `order-paid:${order.id}` }),
     payLadder.clear(user.email),
     prisma.cartItem.deleteMany({ where: { cart: { userId: user.id }, editionId: { in: order.items.map((i) => i.editionId) } } }),
-  ]).then((results) => results.forEach((r) => r.status === "rejected" && console.error("[post-paid] a step failed", r.reason)));
+  ]).then((results) => results.forEach((r) => r.status === "rejected" && logError("post-paid.step", r.reason, { orderId })));
 }

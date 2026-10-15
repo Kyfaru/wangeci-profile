@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { logError } from "@/lib/trace";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
@@ -223,7 +224,7 @@ export const auth = betterAuth({
                 create: { userId: session.userId, deviceId, label: (session.userAgent ?? "").slice(0, 120) || null },
                 update: { lastSeenAt: new Date() },
               })
-              .catch((error) => console.error("[auth] device upsert failed", error));
+              .catch((error) => logError("auth.device-upsert", error, { userId: session.userId }));
           }
         },
       },

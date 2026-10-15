@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { logError } from "@/lib/trace";
 
 /**
  * Writes one row to the first-party activity log. Fire-and-forget: a logging failure must never
@@ -15,6 +16,6 @@ export async function logActivity(params: {
       data: { userId: params.userId, type: params.type, metadata: params.metadata, visitorId: params.visitorId ?? null },
     });
   } catch (error) {
-    console.error("[activity] failed to log", params.type, error);
+    logError("activity.log", error, { type: params.type });
   }
 }

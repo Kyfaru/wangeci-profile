@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { applyProviderEvent } from "@/lib/orders/apply-event";
 import { paystack } from "@/lib/payments/paystack";
+import { api, logError } from "@/lib/trace";
 
 // Webhook routes can be prerendered unless forced dynamic; this one only reads the raw request.
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
  * fix (unknown reference, amount mismatch, duplicates); 5xx ONLY when our database is down, because
  * then a Paystack retry is the cure.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const rawBody = await request.text();
 
   if (!paystack.verifyWebhook(rawBody, request.headers)) {
@@ -31,8 +32,10 @@ export async function POST(request: Request) {
   try {
     await applyProviderEvent(paystack.parseEvent(payload));
   } catch (error) {
-    console.error("[webhooks/paystack] processing failed", error);
+    logError("webhooks.paystack", error);
     return NextResponse.json({ error: "Temporary failure" }, { status: 503 }); // ask Paystack to retry
   }
   return NextResponse.json({ received: true });
 }
+
+export const POST = api("webhooks.paystack.post", handlePOST);

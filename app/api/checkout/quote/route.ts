@@ -3,13 +3,14 @@ import { z } from "zod";
 
 import { buildQuote, QuoteError } from "@/lib/checkout/quote";
 import { rateLimit } from "@/lib/rate-limit";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
 const schema = z.object({ editionIds: z.array(z.string().min(1).max(64)).min(1).max(10), coupon: z.string().trim().max(40).optional() });
 
 /** POST /api/checkout/quote: the prices the order would really use (works for guests; nothing is created). */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!(await rateLimit(`quote:${ip}`, 60, "10 m")).ok) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
@@ -22,3 +23,5 @@ export async function POST(request: Request) {
     throw error;
   }
 }
+
+export const POST = api("checkout.quote.post", handlePOST);

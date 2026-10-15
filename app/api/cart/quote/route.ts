@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ const idsSchema = z.array(z.string().min(1).max(64)).min(1).max(10);
  * GET /api/cart/quote?ids=a,b : server prices for the editions in a browser cart, for DISPLAY only.
  * The browser cart is a shopping list; checkout re-reads every price from the database again.
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!(await rateLimit(`quote:${ip}`, 60, "1 m")).ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
@@ -33,3 +34,5 @@ export async function GET(request: NextRequest) {
   }));
   return NextResponse.json({ items, total: items.reduce((n, i) => n + i.price, 0), currency: items[0]?.currency ?? "KES" });
 }
+
+export const GET = api("cart.quote.get", handleGET);

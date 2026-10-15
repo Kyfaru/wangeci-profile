@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { logError } from "@/lib/trace";
 
 import { Resend } from "resend";
 
@@ -86,7 +87,7 @@ export async function sendEmail({
     // Programmer/operational split: a Resend API error (bad key, invalid
     // recipient) is operational — log with full context and let the caller
     // decide how to surface it, rather than swallowing it silently.
-    console.error("[email] send failed", { purpose, to, error });
+    logError("email.send", error, { purpose });
     throw new EmailSendError(
       error?.message ?? "Resend returned no data and no error",
       error,

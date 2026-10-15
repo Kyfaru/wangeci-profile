@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
 
 import { markOrderPaid } from "@/lib/orders/grant";
 import { afterOrderPaid } from "@/lib/orders/post-paid";
@@ -8,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { findOwnerId, recordAudit } from "@/lib/server/audit";
 import { notify } from "@/lib/server/notifier";
 import { notifyAdmins } from "@/lib/server/notify-admins";
+import { AppError, logError } from "@/lib/trace";
 
 export type ApplyResult =
   | "granted" // the order was moved to PAID and the books granted now
@@ -41,7 +41,7 @@ export async function applyProviderEvent(event: ProviderEvent): Promise<ApplyRes
 async function onPaymentSucceeded(event: Extract<ProviderEvent, { type: "payment.succeeded" }>): Promise<ApplyResult> {
   const order = await prisma.order.findUnique({ where: { providerReference: event.reference }, include: { items: { include: { edition: { include: { work: true } } } } } });
   if (!order) {
-    console.error("[orders] success event for an unknown reference", event.reference);
+    logError("orders.unknown-reference", new AppError("ORDER_NOT_FOUND", "payment event for an unknown reference", 404), { reference: event.reference });
     return "noop";
   }
   if (order.provider !== event.provider) return "noop";
@@ -57,7 +57,7 @@ async function onPaymentSucceeded(event: Extract<ProviderEvent, { type: "payment
   // 2. M-Pesa callbacks are unsigned, so confirm with Safaricom directly before trusting them.
   if (event.provider === "MPESA") {
     const confirmed = await getProvider("MPESA").verify(event.reference).catch((error) => {
-      console.error("[orders] M-Pesa confirmation failed", error);
+      logError("orders.mpesa-confirm", error, { orderId: order.id });
       throw error; // cannot confirm right now: let the caller retry later
     });
     if (confirmed.state !== "success") return "noop";
@@ -68,16 +68,15 @@ async function onPaymentSucceeded(event: Extract<ProviderEvent, { type: "payment
   if (!granted) return "noop";
 
   // 4. After the commit: invoice, email, SMS and admin alerts. Failures here must never undo or fail the payment.
-  await afterOrderPaid(order.id).catch((error) => console.error("[orders] post-payment steps failed", error));
+  await afterOrderPaid(order.id).catch((error) => logError("orders.post-paid", error, { orderId: order.id }));
   return "granted";
 }
 
 async function raiseMismatch(orderId: string, expected: string, currency: string, event: Extract<ProviderEvent, { type: "payment.succeeded" }>) {
   const message = `Payment amount mismatch on order ${orderId}: expected ${currency} ${expected}, provider reported ${event.currency} ${event.amount} (${event.provider} ${event.reference}). No access granted.`;
-  console.error("[orders]", message);
-  Sentry.captureMessage(message, "error");
+  logError("orders.amount-mismatch", new AppError("ORDER_AMOUNT_MISMATCH", message, 500), { orderId });
   await prisma.order.update({ where: { id: orderId }, data: { failureReason: "amount_mismatch" } }).catch(() => {});
-  await notifyAdmins({ type: "payment_mismatch", title: "Payment amount mismatch", body: message, link: `/admin/sales/${orderId}`, dedupeKey: `mismatch:${orderId}`, urgent: true }).catch((e) => console.error("[orders] admin alert failed", e));
+  await notifyAdmins({ type: "payment_mismatch", title: "Payment amount mismatch", body: message, link: `/admin/sales/${orderId}`, dedupeKey: `mismatch:${orderId}`, urgent: true }).catch((e) => logError("orders.admin-alert", e, { orderId }));
 }
 
 async function onPaymentFailed(event: Extract<ProviderEvent, { type: "payment.failed" }>): Promise<ApplyResult> {

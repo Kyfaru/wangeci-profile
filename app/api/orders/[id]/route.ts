@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { findOrderForViewer } from "@/lib/orders/access";
 import { reconcilePendingOrder } from "@/lib/orders/apply-event";
 import { rateLimit } from "@/lib/rate-limit";
+import { api, logError } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ const maskPhone = (p: string | null) => (p ? `${p.slice(0, 4)}***${p.slice(-3)}`
  * directly (verify) and runs the same idempotent grant, which protects against a delayed or missed
  * webhook. The browser is never a witness: only the server-side result is shown.
  */
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = new URL(request.url).searchParams.get("t");
 
@@ -31,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       await reconcilePendingOrder(found.order.id);
       found = (await findOrderForViewer(id, token)) ?? found;
     } catch (error) {
-      console.error("[orders] status fallback failed", error); // keep showing PENDING; the cron sweep will retry
+      logError("orders.status-fallback", error, { orderId: found.order.id }); // keep showing PENDING; the cron sweep will retry
     }
   }
 
@@ -57,3 +58,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     items: order.items.map((i) => ({ title: i.edition.title ?? i.edition.work.title, slug: i.edition.work.slug, price: Number(i.unitPrice) })),
   });
 }
+
+export const GET = api("orders.id.get", handleGET);

@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { logError } from "@/lib/trace";
 import { prisma } from "@/lib/prisma";
 
 import { E164_REGEX } from "@/lib/phone";
@@ -121,7 +122,7 @@ export async function sendSms({
       where: { id: log.id },
       data: { status: "FAILED" },
     });
-    console.error("[sms] send failed", { purpose, to, error });
+    logError("sms.send", error, { purpose });
     throw new SmsSendError(
       error instanceof Error ? error.message : "Africa's Talking send failed",
       error,

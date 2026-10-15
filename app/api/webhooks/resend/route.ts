@@ -4,6 +4,7 @@ import { Webhook, WebhookVerificationError } from "svix";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import type { NotificationStatus } from "@prisma/client";
+import { api } from "@/lib/trace";
 
 // See app/api/webhooks/paystack/route.ts for why this is required — this
 // handler would otherwise be eligible for Next.js's build-time static
@@ -52,7 +53,7 @@ function statusForEventType(eventType: string): NotificationStatus | null {
  * outbound email; this webhook is what advances that row to DELIVERED or
  * BOUNCED so the app knows whether a send actually reached the recipient.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const rawBody = await request.text();
 
   const svixId = request.headers.get("svix-id");
@@ -129,3 +130,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ received: true });
 }
+
+export const POST = api("webhooks.resend.post", handlePOST);

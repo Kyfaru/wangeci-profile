@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { reconcilePendingOrder } from "@/lib/orders/apply-event";
 import { purgeAbandonedGuestAccounts } from "@/lib/checkout/abandoned";
 import { prisma } from "@/lib/prisma";
+import { api, logError } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,7 +31,7 @@ function authorised(request: Request): boolean {
  *  3. Delete contact-form bell items older than 90 days.
  *  4. Delete accounts that checkout created but nobody ever paid for or signed in to (after 7 days).
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   if (!authorised(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = Date.now();
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
       const result = await reconcilePendingOrder(id);
       outcomes[result] = (outcomes[result] ?? 0) + 1;
     } catch (error) {
-      console.error("[cron] reconcile failed", id, error);
+      logError("cron.reconcile", error, { orderId: id });
       outcomes.error = (outcomes.error ?? 0) + 1;
     }
   }
@@ -58,3 +59,5 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ checked: stuck.length, outcomes, expired: expired.count, purgedMessages: purged.count, purgedAccounts });
 }
+
+export const GET = api("cron.orders.get", handleGET);

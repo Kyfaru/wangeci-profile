@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { logError } from "@/lib/trace";
 
 /**
  * Checks a Cloudflare Turnstile token on the server. With no secret configured (local development
@@ -16,7 +17,7 @@ export async function verifyTurnstile(token: string | null | undefined, ip?: str
     const data = (await res.json()) as { success?: boolean };
     return data.success === true;
   } catch (error) {
-    console.error("[turnstile] verification failed", error);
+    logError("turnstile.verify", error);
     return false; // fail closed
   }
 }

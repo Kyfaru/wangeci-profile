@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import type { NotificationStatus } from "@prisma/client";
+import { api } from "@/lib/trace";
 
 // See app/api/webhooks/paystack/route.ts for why this is required — this
 // handler would otherwise be eligible for Next.js's build-time static
@@ -58,7 +59,7 @@ function statusForDeliveryStatus(status: string): NotificationStatus | null {
  * outbound SMS; this webhook is what advances that row to DELIVERED or
  * FAILED so the app knows whether the text actually reached the recipient.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   if (!hasValidToken(request)) {
     console.error("[webhooks/africastalking] bad or missing token");
     return NextResponse.json(
@@ -112,3 +113,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ received: true });
 }
+
+export const POST = api("webhooks.africastalking.delivery.post", handlePOST);

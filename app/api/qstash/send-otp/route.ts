@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { env } from "@/lib/env";
 import { deliverOtp } from "@/lib/queue";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ const jobSchema = z.object({
  * POST /api/qstash/send-otp: the queue worker. Only QStash may call it: the request carries an
  * Upstash-Signature header that we verify against the raw body BEFORE parsing anything.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = await request.text();
   const signature = request.headers.get("upstash-signature");
 
@@ -39,3 +40,5 @@ export async function POST(request: Request) {
   await deliverOtp(parsed.data);
   return NextResponse.json({ ok: true });
 }
+
+export const POST = api("qstash.send-otp.post", handlePOST);

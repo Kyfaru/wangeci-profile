@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { logError } from "@/lib/trace";
 
 import ReceiptEmail from "@/emails/receipt-email";
 import { sendEmail } from "@/lib/email";
@@ -60,5 +61,5 @@ export async function notify(userId: string, event: NotifyEvent, channels: Chann
   }
 
   const results = await Promise.allSettled(tasks);
-  for (const r of results) if (r.status === "rejected") console.error("[notify] a channel failed", event.type, r.reason);
+  for (const r of results) if (r.status === "rejected") logError("notify.channel", r.reason, { type: event.type, userId });
 }

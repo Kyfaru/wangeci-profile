@@ -24,7 +24,7 @@ vi.mock("@/lib/server/notify-admins", () => ({ notifyAdmins: mocks.notifyAdmins 
 vi.mock("@/lib/email", () => ({ sendEmail: vi.fn(async () => ({ id: "e" })) }));
 vi.mock("@/lib/sms", () => ({ sendSms: vi.fn(async () => ({})) }));
 vi.mock("@/lib/checkout/attempt-ladder", () => ({ payLadder: { clear: vi.fn(async () => {}) } }));
-vi.mock("@sentry/nextjs", () => ({ captureMessage: mocks.captureMessage, captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureMessage: mocks.captureMessage, captureException: mocks.captureMessage }));
 
 import { applyProviderEvent } from "./apply-event";
 import { CheckoutError, createPendingOrder } from "./create";

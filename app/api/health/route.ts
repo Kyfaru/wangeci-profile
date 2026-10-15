@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { api, logError } from "@/lib/trace";
 
 // Without this, Next.js could statically optimize this route (run it once
 // at `next build` time and cache the result) since it uses no dynamic API
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  * endpoint that fails loudly when the app can't talk to Postgres, instead
  * of surfacing as slow/broken behavior on real user requests.
  */
-export async function GET() {
+async function handleGET() {
   try {
     await prisma.$queryRaw`SELECT 1`;
     return NextResponse.json({ status: "ok", ts: new Date().toISOString() });
@@ -29,7 +30,7 @@ export async function GET() {
     // A failed health check is an operational signal, not a crash — catch
     // it and return 503 so the monitor/orchestrator can act on it, rather
     // than the route throwing and returning an opaque 500.
-    console.error("[health] database check failed", error);
+    logError("health.db", error);
     return NextResponse.json(
       {
         status: "error",
@@ -39,3 +40,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = api("health.get", handleGET);

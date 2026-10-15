@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { logError } from "@/lib/trace";
 
 import AdminAlertEmail from "@/emails/admin-alert-email";
 import { sendEmail } from "@/lib/email";
@@ -56,6 +57,6 @@ export async function notifyAdmins(notice: AdminNotice): Promise<void> {
       subject: notice.title,
       react: createElement(AdminAlertEmail, { title: notice.title, body: notice.body }),
       purpose: notice.type,
-    }).catch((error) => console.error("[notifyAdmins] email failed", error));
+    }).catch((error) => logError("notify-admins.email", error));
   }
 }

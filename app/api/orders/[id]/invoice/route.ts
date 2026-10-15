@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 
 import { findOrderForViewer } from "@/lib/orders/access";
 import { invoiceForOrder } from "@/lib/orders/post-paid";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/orders/[id]/invoice?t=token : the invoice / receipt PDF for a PAID order, for its owner or the paying device. */
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const found = await findOrderForViewer(id, new URL(request.url).searchParams.get("t"));
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -16,3 +17,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${invoice.order.invoiceNumber}.pdf"`, "Cache-Control": "private, no-store" },
   });
 }
+
+export const GET = api("orders.id.invoice.get", handleGET);

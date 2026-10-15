@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { grantReplaceConsent } from "@/lib/auth/session-policy";
 import { rateLimit } from "@/lib/rate-limit";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ const bodySchema = z.object({ identifier: z.string().trim().min(3).max(320) });
  * Stores a short-lived consent for that email or phone. It signs nobody in: a correct code or
  * Google login is still required, and the answer never says whether the account exists.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!(await rateLimit(`replace-consent:${ip}`, 10, "10 m")).ok) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -24,3 +25,5 @@ export async function POST(request: Request) {
   await grantReplaceConsent(parsed.data.identifier);
   return new NextResponse(null, { status: 204 });
 }
+
+export const POST = api("session.replace-consent.post", handlePOST);
