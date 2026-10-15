@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/trace";
@@ -8,13 +8,18 @@ import { z } from "zod";
 import {
   AdminError,
   ASSIGNABLE_ROLES,
+  COMMENT_STATUSES,
   createCoupon,
   grantComplimentaryAccess,
+  moderateComment,
   recordManualRefund,
+  replyToComment,
   requestRefund,
   revokeComplimentaryAccess,
   setBan,
+  setAdminEmailAlerts,
   setCouponActive,
+  setFeedbackStatus,
   setEditionActive,
   setRole,
   type Actor,
@@ -125,3 +130,34 @@ export async function editionActiveAction(_prev: ActionResult | null, form: Form
     return active ? "Edition published." : "Edition retired. Owners keep their access.";
   });
 }
+
+export async function moderateCommentAction(_prev: ActionResult | null, form: FormData) {
+  return run("comments.moderate", async (actor) => {
+    const status = z.enum(COMMENT_STATUSES).parse(text(form, "status"));
+    await moderateComment({ commentId: text(form, "commentId"), status, actor, reason: text(form, "reason") });
+    return "Comment updated.";
+  });
+}
+
+export async function replyToCommentAction(_prev: ActionResult | null, form: FormData) {
+  return run("comments.moderate", async (actor) => {
+    await replyToComment({ commentId: text(form, "commentId"), body: text(form, "body"), actor });
+    return "Reply posted.";
+  });
+}
+
+export async function feedbackStatusAction(_prev: ActionResult | null, form: FormData) {
+  return run("comments.moderate", async (actor) => {
+    const status = z.enum(["READ", "ACTIONED"]).parse(text(form, "status"));
+    await setFeedbackStatus({ feedbackId: text(form, "feedbackId"), status, actor });
+    return "Feedback updated.";
+  });
+}
+
+export async function emailAlertsAction(_prev: ActionResult | null, form: FormData) {
+  return run("messages.reply", async (actor) => {
+    await setAdminEmailAlerts({ actor, enabled: text(form, "enabled") === "true" });
+    return "Saved.";
+  });
+}
+

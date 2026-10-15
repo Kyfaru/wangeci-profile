@@ -1,5 +1,8 @@
 import { betterAuth } from "better-auth";
-import { logError } from "@/lib/trace";
+import { createElement } from "react";
+import AdminAlertEmail from "@/emails/admin-alert-email";
+import { sendEmail } from "@/lib/email";
+import { logError, traced } from "@/lib/trace";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
@@ -75,6 +78,23 @@ async function bootstrapOwner(user: { id: string; email: string }) {
   if (owner) return;
   await prisma.user.update({ where: { id: user.id }, data: { role: "owner" } });
   await logActivity({ userId: user.id, type: "owner.bootstrapped" });
+}
+
+/** An admin signing in from a device never seen for them gets an email (someone else may be using their code). Never blocks sign-in. */
+async function alertNewAdminDevice(userId: string, deviceId: string) {
+  await traced("auth.new-admin-device", async () => {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, role: true } });
+    if (!user || !user.role || user.role === "reader") return;
+    if (await prisma.userDevice.findUnique({ where: { userId_deviceId: { userId, deviceId } }, select: { id: true } })) return;
+    await sendEmail({
+      to: user.email,
+      userId,
+      purpose: "admin_new_device",
+      subject: "New device signed in to the Wangeci admin",
+      react: createElement(AdminAlertEmail, { title: "New device signed in", body: "Your admin account was just signed in from a device we have not seen before. If this was not you, ask the owner to change your role or ban the account." }),
+    });
+    await logActivity({ userId, type: "admin.new_device" });
+  });
 }
 
 /**
@@ -218,6 +238,7 @@ export const auth = betterAuth({
           await logActivity({ userId: session.userId, type: "login" });
           const deviceId = (session as { deviceId?: string | null }).deviceId;
           if (deviceId) {
+            await alertNewAdminDevice(session.userId, deviceId);
             await prisma.userDevice
               .upsert({
                 where: { userId_deviceId: { userId: session.userId, deviceId } },

@@ -338,7 +338,7 @@ export function CheckoutClient({
                   </p>
                 )}
 
-                <button type="button" onClick={pay} disabled={busy} className={cn(primaryButton, "mt-5")}>
+                <button type="button" onClick={pay} disabled={busy} data-umami-event="buy" className={cn(primaryButton, "mt-5")}>
                   {busy ? "Starting payment..." : quote.total === 0 ? "Get my book" : `Pay ${money(quote.total, quote.currency)}`}
                 </button>
                 <p className="mt-3 text-center text-xs text-navy/50">You are only charged once the payment provider confirms it.</p>

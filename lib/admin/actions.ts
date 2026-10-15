@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 import { getProvider } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
@@ -204,6 +204,62 @@ export async function setEditionActive(input: { editionId: string; active: boole
     if (input.active && edition._count.chapters === 0) throw new AdminError("Add chapters before publishing this edition.");
     await tx.edition.update({ where: { id: edition.id }, data: { isActive: input.active } });
     await recordAudit({ adminId: input.actor.id, action: input.active ? "edition.published" : "edition.retired", targetType: "edition", targetId: edition.id, meta: { reason }, ip: input.actor.ip }, tx);
+  });
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Community: reader comments and feedback, and what admins do with them.
+// ---------------------------------------------------------------------------
+
+export const COMMENT_STATUSES = ["APPROVED", "REJECTED", "SPAM", "HIDDEN"] as const;
+
+/** Approve, reject, mark as spam or hide one comment. Only APPROVED comments are shown to readers. */
+export async function moderateComment(input: { commentId: string; status: (typeof COMMENT_STATUSES)[number]; actor: Actor; reason: string }): Promise<{ ok: true }> {
+  const reason = reasonOrThrow(input.reason);
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.comment.findUnique({ where: { id: input.commentId } });
+    if (!row) throw new AdminError("Comment not found.");
+    await tx.comment.update({ where: { id: row.id }, data: { status: input.status, moderatedById: input.actor.id, moderatedAt: new Date() } });
+    await recordAudit({ adminId: input.actor.id, action: `comment.${input.status.toLowerCase()}`, targetType: "comment", targetId: row.id, meta: { reason, from: row.status }, ip: input.actor.ip }, tx);
+  });
+  return { ok: true };
+}
+
+/** A public reply from the site. It starts APPROVED (an admin wrote it) and always hangs off the top-level comment. */
+export async function replyToComment(input: { commentId: string; body: string; actor: Actor }): Promise<{ ok: true }> {
+  const body = z.string().trim().min(1, "Write a reply first.").max(1000).parse(input.body);
+  await prisma.$transaction(async (tx) => {
+    const parent = await tx.comment.findUnique({ where: { id: input.commentId } });
+    if (!parent) throw new AdminError("Comment not found.");
+    const reply = await tx.comment.create({
+      data: { userId: input.actor.id, postSlug: parent.postSlug, body, status: "APPROVED", parentId: parent.parentId ?? parent.id, moderatedById: input.actor.id, moderatedAt: new Date() },
+    });
+    await recordAudit({ adminId: input.actor.id, action: "comment.replied", targetType: "comment", targetId: parent.id, meta: { replyId: reply.id }, ip: input.actor.ip }, tx);
+  });
+  return { ok: true };
+}
+
+/** Mark feedback as read or actioned. */
+export async function setFeedbackStatus(input: { feedbackId: string; status: "READ" | "ACTIONED"; actor: Actor }): Promise<{ ok: true }> {
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.feedback.findUnique({ where: { id: input.feedbackId } });
+    if (!row) throw new AdminError("Feedback not found.");
+    await tx.feedback.update({ where: { id: row.id }, data: { status: input.status } });
+    await recordAudit({ adminId: input.actor.id, action: `feedback.${input.status.toLowerCase()}`, targetType: "feedback", targetId: row.id, ip: input.actor.ip }, tx);
+  });
+  return { ok: true };
+}
+
+/** The admin's own switch for urgent-item emails (user_preferences.emailNotifications). */
+export async function setAdminEmailAlerts(input: { actor: Actor; enabled: boolean }): Promise<{ ok: true }> {
+  await prisma.$transaction(async (tx) => {
+    await tx.userPreferences.upsert({
+      where: { userId: input.actor.id },
+      create: { userId: input.actor.id, emailNotifications: input.enabled },
+      update: { emailNotifications: input.enabled },
+    });
+    await recordAudit({ adminId: input.actor.id, action: "settings.email_alerts", targetType: "user", targetId: input.actor.id, meta: { enabled: input.enabled }, ip: input.actor.ip }, tx);
   });
   return { ok: true };
 }

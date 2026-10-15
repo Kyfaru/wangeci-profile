@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isRelaxed } from "@/lib/site";
+
 /**
  * Validates and parses all environment variables the app depends on.
  * Parsed once at import time so a missing or malformed var crashes boot
@@ -114,13 +116,30 @@ const envSchema = z.object({
     z.string().optional(),
   ),
 
+  // Umami analytics (hosted). Tracking needs UMAMI_WEBSITE_ID; the admin cards also need UMAMI_API_KEY.
+  UMAMI_WEBSITE_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  UMAMI_API_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  UMAMI_API_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().default("https://api.umami.is/v1")),
+  UMAMI_SCRIPT_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().default("https://cloud.umami.is/script.js")),
+
+  // Chatwoot live chat. The widget needs base URL + website token; the webhook also needs the secret.
+  CHATWOOT_BASE_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
+  CHATWOOT_WEBSITE_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  CHATWOOT_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // Sanity blog (read-only). Absent PROJECT_ID means no /blog.
+  SANITY_PROJECT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  SANITY_DATASET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).default("production")),
+  SANITY_API_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  SANITY_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
   // Comma-separated list of emails allowed into the admin panel
   ADMIN_EMAIL_ALLOWLIST: z.string().min(1),
 }).superRefine((value, ctx) => {
   // Fail fast at boot on the REAL production site rather than on the first request that needs the value.
-  // Staging (Vercel) also runs with NODE_ENV=production, so it is told apart by NEXT_PUBLIC_SITE_ENV: staging may boot without
-  // the launch-only services (Upstash, QStash, Daraja, Turnstile...) and falls back to in-memory limits.
-  if (value.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_SITE_ENV !== "production") return;
+  // Staging (Vercel) also runs with NODE_ENV=production, so it must say NEXT_PUBLIC_SITE_ENV=staging to boot without
+  // the launch-only services (Upstash, QStash, Daraja, Turnstile...). An unset value is treated as the real site.
+  if (isRelaxed(value.NODE_ENV)) return;
   for (const key of [
     "UPSTASH_REDIS_REST_URL",
     "UPSTASH_REDIS_REST_TOKEN",

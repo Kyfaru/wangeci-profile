@@ -41,6 +41,8 @@ export type ProviderEvent =
   | { type: "payment.failed"; provider: ProviderId; reference: string; reason?: string }
   | { type: "refund.processed"; provider: ProviderId; reference: string }
   | { type: "refund.failed"; provider: ProviderId; reference: string }
+  | { type: "dispute.opened"; provider: ProviderId; reference: string }
+  | { type: "dispute.resolved"; provider: ProviderId; reference: string; resolution?: string }
   | { type: "ignored" };
 
 export interface PaymentProvider {

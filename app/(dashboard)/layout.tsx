@@ -4,6 +4,7 @@ import { AudioHost } from "@/components/audio/AudioHost";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { MobileNav } from "@/components/dashboard/MobileNav";
 import { Sidebar } from "@/components/dashboard/Sidebar";
+import { VerifyBanner } from "@/components/dashboard/VerifyBanner";
 import { requireUser } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic"; // reads the session cookie on every request
@@ -23,6 +24,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
         <MobileNav>
           <Sidebar user={user} />
         </MobileNav>
+        {(!user.emailVerified || !user.phoneNumberVerified) && <VerifyBanner />}
         {children}
       </div>
       {/* One audio element for the whole dashboard, so listening continues while browsing. */}

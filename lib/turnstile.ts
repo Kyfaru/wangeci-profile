@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { isRelaxed } from "@/lib/site";
 import { logError } from "@/lib/trace";
 
 /**
@@ -6,7 +7,7 @@ import { logError } from "@/lib/trace";
  * only; env.ts requires it in production) the check is skipped.
  */
 export async function verifyTurnstile(token: string | null | undefined, ip?: string): Promise<boolean> {
-  if (!env.TURNSTILE_SECRET_KEY) return process.env.NEXT_PUBLIC_SITE_ENV !== "production"; // skipped everywhere except the real production site
+  if (!env.TURNSTILE_SECRET_KEY) return isRelaxed(); // skipped only in development/test or declared staging
   if (!token) return false;
   try {
     const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {

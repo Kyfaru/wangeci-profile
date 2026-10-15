@@ -12,16 +12,28 @@ const isDev = process.env.NODE_ENV === "development";
 
 // Content-Security-Policy. REPORT-ONLY for now: it logs violations in the browser console
 // without blocking anything. Flip it to enforcing after a staging pass with the browser console open (see docs/GO_LIVE.md).
+// Origins of the optional third-party services, added only when they are configured.
+const originOf = (url?: string) => {
+  try {
+    return url ? new URL(url).origin : "";
+  } catch {
+    return "";
+  }
+};
+const umamiOrigin = process.env.UMAMI_WEBSITE_ID ? originOf(process.env.UMAMI_SCRIPT_URL || "https://cloud.umami.is/script.js") : "";
+const chatwootOrigin = process.env.CHATWOOT_WEBSITE_TOKEN ? originOf(process.env.CHATWOOT_BASE_URL) : "";
+const chatwootSocket = chatwootOrigin.replace(/^http/, "ws");
+
 function buildCsp(nonce: string) {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""} ${umamiOrigin} ${chatwootOrigin}`.trim(),
     "style-src 'self' 'unsafe-inline'", // inline style attributes (React, motion) cannot carry a nonce
     "img-src 'self' data: blob: https://*.r2.dev",
     "font-src 'self' data:",
     "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
-    "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://challenges.cloudflare.com https://checkout.paystack.com https://api.paystack.co",
-    "frame-src https://challenges.cloudflare.com https://checkout.paystack.com", // Turnstile widget, Paystack card popup
+    `connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://challenges.cloudflare.com https://checkout.paystack.com https://api.paystack.co ${umamiOrigin} ${chatwootOrigin} ${chatwootSocket}`.replace(/ +/g, " ").trim(),
+    `frame-src https://challenges.cloudflare.com https://checkout.paystack.com ${chatwootOrigin}`.trim(), // Turnstile widget, Paystack card popup, Chatwoot
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

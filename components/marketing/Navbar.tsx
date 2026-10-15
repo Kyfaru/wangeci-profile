@@ -75,7 +75,7 @@ export function Navbar() {
 
   // Far right of every page: signed-out visitors land on sign-in; signed-in ones are sent on to the dashboard by that page.
   const login = (
-    <Link href="/sign-in" aria-label="Sign in" className="grid size-11 place-items-center transition-opacity hover:opacity-70">
+    <Link href="/sign-in" aria-label="Sign in" data-umami-event="sign-in"className="grid size-11 place-items-center transition-opacity hover:opacity-70">
       <MaskIcon name="lucide--user" size={30} />
     </Link>
   );

@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 import { BuyButtons } from "@/components/store/BuyButtons";
 import { getBookBySlug, getFreePreview } from "@/lib/catalogue";
 import { jsonLd } from "@/lib/json-ld";
+import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/server/session";
 import { SITE } from "@/lib/site";
+import { CommunityForms } from "@/components/community/CommunityForms";
 
 // Rendered per request (not at build time): the build has no database, and the catalogue is small and cheap to read.
 export const dynamic = "force-dynamic";
@@ -27,6 +30,17 @@ export default async function BookPreviewPage({ params }: PageProps<"/store/[slu
   if (!book) notFound();
 
   const preview = await getFreePreview(book.slug);
+  // Only APPROVED comments (and their approved replies) are public.
+  const author = { select: { name: true, role: true } };
+  const [comments, userId] = await Promise.all([
+    prisma.comment.findMany({
+      where: { postSlug: book.slug, status: "APPROVED", parentId: null },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { user: author, replies: { where: { status: "APPROVED" }, orderBy: { createdAt: "asc" }, take: 20, include: { user: author } } },
+    }),
+    getSessionUserId(),
+  ]);
   const ebook = book.editions.find((e) => e.format === "ebook");
   const audio = book.editions.find((e) => e.format === "audiobook");
 
@@ -113,6 +127,30 @@ export default async function BookPreviewPage({ params }: PageProps<"/store/[slu
               <p className="mt-8 text-base text-black/60">Enjoying it? Buy the book above to keep reading.</p>
             </section>
           )}
+
+          <section id="comments" className="pt-12">
+            <h2 className="text-2xl font-bold text-black md:text-3xl">Reader comments</h2>
+            {comments.length === 0 ? (
+              <p className="mt-4 text-sm text-black/60">No comments yet.</p>
+            ) : (
+              <ul className="mt-4 space-y-4">
+                {comments.map((c) => (
+                  <li key={c.id} className="rounded-2xl border border-black/10 bg-white p-4">
+                    <p className="text-sm font-medium text-black">{c.user.name.split(" ")[0]}</p>
+                    {/* Plain text only: React escapes it, line breaks are kept. */}
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-black/80">{c.body}</p>
+                    {c.replies.map((r) => (
+                      <div key={r.id} className="mt-3 border-l-2 border-gold pl-3">
+                        <p className="text-sm font-medium text-black">{r.user.role === "reader" ? r.user.name.split(" ")[0] : SITE.brand}</p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-black/80">{r.body}</p>
+                      </div>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <CommunityForms slug={book.slug} signedIn={Boolean(userId)} />
+          </section>
         </div>
       </div>
     </div>

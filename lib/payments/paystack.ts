@@ -10,9 +10,16 @@ import { ProviderError, type PaymentProvider, type ProviderEvent, type VerifyRes
 //    failed or abandoned payments are discovered with GET /transaction/verify/:reference)
 //  - amount is in the smallest currency unit (KES cents); verify returns data.status "success" | "failed" | "abandoned"
 //  - POST /refund { transaction, amount?, merchant_note }; statuses pending, processing, processed, needs-attention
-// UNVERIFIED: the exact field that carries the original transaction reference in refund.* payloads
-// (Paystack publishes no sample). parseEvent accepts the likely names, and the match is only
-// honoured for orders where we ourselves asked for a refund.
+//  - also verified 2026-10-15 on the same webhook page: refund.pending and refund.processing exist (state
+//    only, deliberately ignored: only refund.processed / refund.failed change an order), and the dispute
+//    events charge.dispute.create | charge.dispute.remind | charge.dispute.resolve
+//  - API reference: the dispute object carries the disputed transaction at data.transaction.reference
+//    (resolution "merchant-accepted" | "declined"); the Create Refund response nests transaction.reference
+//    but Fetch/List return transaction as a numeric id
+// UNVERIFIED: the webhook payload for refund.* and charge.dispute.* has no published sample. We assume
+// it mirrors the API object, so parseEvent accepts the likely reference fields. A match is only honoured
+// for refunds we asked for, and a dispute only flags a PAID order we know (it never revokes access).
+// charge.dispute.remind is ignored: the order is already flagged by charge.dispute.create.
 const BASE = "https://api.paystack.co";
 
 const toMinor = (major: number) => Math.round(major * 100);
@@ -73,6 +80,14 @@ export const paystack: PaymentProvider = {
         const ref = [data.transaction_reference, nested?.reference, data.reference].find((v): v is string => typeof v === "string");
         if (!ref) return { type: "ignored" };
         return { type: p.event === "refund.processed" ? "refund.processed" : "refund.failed", provider: "PAYSTACK", reference: ref };
+      }
+      case "charge.dispute.create":
+      case "charge.dispute.resolve": {
+        const nested = data.transaction as { reference?: unknown } | undefined;
+        const ref = [nested?.reference, data.transaction_reference].find((v): v is string => typeof v === "string");
+        if (!ref) return { type: "ignored" };
+        if (p.event === "charge.dispute.create") return { type: "dispute.opened", provider: "PAYSTACK", reference: ref };
+        return { type: "dispute.resolved", provider: "PAYSTACK", reference: ref, resolution: typeof data.resolution === "string" ? data.resolution : undefined };
       }
       default:
         return { type: "ignored" };

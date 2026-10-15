@@ -151,6 +151,40 @@ describe.skipIf(!url)("money path (database)", () => {
     expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(1);
   });
 
+  it("a dispute flags a PAID order once, keeps access, and an unknown reference is a noop", async () => {
+    const { order, user, reference } = await pendingOrder();
+    const owner = await db.user.create({ data: { name: "Owner", email: `owner-${stamp}-${seq}@example.com`, role: "owner" } });
+    created.users.push(owner.id);
+    await applyProviderEvent(success(reference));
+    mocks.notifyAdmins.mockClear();
+
+    const opened = { type: "dispute.opened", provider: "PAYSTACK", reference } as const;
+    expect(await applyProviderEvent(opened)).toBe("dispute_opened");
+    expect(await applyProviderEvent(opened)).toBe("dispute_opened"); // webhook retry
+    const alerts = mocks.notifyAdmins.mock.calls.map((c: unknown[]) => c[0] as { dedupeKey: string; urgent: boolean });
+    expect(new Set(alerts.map((a) => a.dedupeKey))).toEqual(new Set([`dispute:${order.id}`])); // same key: one bell item
+    expect(alerts.every((a) => a.urgent)).toBe(true);
+    expect(await db.auditLog.count({ where: { targetId: order.id, action: "dispute.opened" } })).toBe(1);
+
+    const after = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe("PAID");
+    expect(after.failureReason).toBe("dispute_open");
+    expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(1);
+
+    expect(await applyProviderEvent({ type: "dispute.resolved", provider: "PAYSTACK", reference, resolution: "declined" })).toBe("dispute_resolved");
+    expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(1);
+
+    expect(await applyProviderEvent({ type: "dispute.opened", provider: "PAYSTACK", reference: "never-issued" })).toBe("noop");
+  });
+
+  it("an amount mismatch stays blocked, and a dispute on an unpaid order is a noop", async () => {
+    const { order, user, reference } = await pendingOrder();
+    expect(await applyProviderEvent(success(reference, 50))).toBe("mismatch");
+    expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(0);
+    expect(await applyProviderEvent({ type: "dispute.opened", provider: "PAYSTACK", reference })).toBe("noop"); // not PAID: nothing to flag
+    expect((await db.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe("PENDING");
+  });
+
   it("M-Pesa: a callback saying 'paid' is only trusted after Safaricom confirms it", async () => {
     const { user, reference } = await pendingOrder("MPESA");
     mocks.verify.mockResolvedValueOnce({ state: "pending" });

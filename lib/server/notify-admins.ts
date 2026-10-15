@@ -51,7 +51,9 @@ export async function notifyAdmins(notice: AdminNotice): Promise<void> {
     });
   }
 
-  if (notice.urgent && env.CONTACT_INBOX_EMAIL) {
+  // The owner can switch the urgent email off in /admin/settings (the bell item above is always written).
+  const emailOff = (await prisma.userPreferences.count({ where: { user: { role: "owner" }, emailNotifications: false } })) > 0;
+  if (notice.urgent && env.CONTACT_INBOX_EMAIL && !emailOff) {
     await sendEmail({
       to: env.CONTACT_INBOX_EMAIL,
       subject: notice.title,
