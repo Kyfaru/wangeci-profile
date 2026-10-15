@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { findOrderForViewer } from "@/lib/orders/access";
+import { findOrderForViewer, ORDER_TOKEN_HEADER } from "@/lib/orders/access";
 import { reconcilePendingOrder } from "@/lib/orders/apply-event";
+import { maskEmail, maskPhone } from "@/lib/phone";
 import { rateLimit } from "@/lib/rate-limit";
 import { api, logError } from "@/lib/trace";
 
@@ -10,19 +11,17 @@ export const dynamic = "force-dynamic";
 /** Wait this long for the webhook before asking the provider ourselves. */
 const FALLBACK_AFTER_MS = 15_000;
 
-const maskEmail = (e: string) => e.replace(/^(.).*(@.*)$/, "$1***$2");
-const maskPhone = (p: string | null) => (p ? `${p.slice(0, 4)}***${p.slice(-3)}` : null);
-
 /**
- * GET /api/orders/[id]?t=token : the buyer's own order. The signed-in owner, or the device that paid
- * (it holds the secret token), can see it. Everyone else gets 404. The thank-you page and the payment
+ * GET /api/orders/[id] (token in the x-order-token header): the buyer's own order. The signed-in owner, or
+ * the device that paid (it holds the secret token), can see it; only the owner sees the account's full
+ * name, email and phone. Everyone else gets 404. The thank-you page and the payment
  * modal poll this. If the order is still PENDING after a short wait, the server asks the provider
  * directly (verify) and runs the same idempotent grant, which protects against a delayed or missed
  * webhook. The browser is never a witness: only the server-side result is shown.
  */
 async function handleGET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const token = new URL(request.url).searchParams.get("t");
+  const token = request.headers.get(ORDER_TOKEN_HEADER);
 
   let found = await findOrderForViewer(id, token);
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 }); // not yours looks the same as not there
@@ -53,7 +52,9 @@ async function handleGET(request: Request, { params }: { params: Promise<{ id: s
     // True while this device may still claim the new account's session (see /api/auth/checkout/claim).
     claimable: order.status === "PAID" && order.accountCreated && !order.claimedAt && !signedIn,
     accountCreated: order.accountCreated,
-    buyer: { name: order.user.name, email: signedIn || token ? order.user.email : maskEmail(order.user.email), phone: signedIn || token ? order.user.phoneNumber : maskPhone(order.user.phoneNumber) },
+    buyer: signedIn
+      ? { name: order.user.name, email: order.user.email, phone: order.user.phoneNumber }
+      : { name: order.user.name.split(" ")[0] ?? "", email: maskEmail(order.user.email), phone: maskPhone(order.payerPhone) },
     refundPending: Boolean(order.refundRequestedAt) && order.status === "PAID",
     items: order.items.map((i) => ({ title: i.edition.title ?? i.edition.work.title, slug: i.edition.work.slug, price: Number(i.unitPrice) })),
   });

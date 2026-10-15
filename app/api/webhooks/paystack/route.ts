@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { applyProviderEvent } from "@/lib/orders/apply-event";
 import { paystack } from "@/lib/payments/paystack";
-import { api, logError } from "@/lib/trace";
+import { AppError, api, logError } from "@/lib/trace";
 
 // Webhook routes can be prerendered unless forced dynamic; this one only reads the raw request.
 export const dynamic = "force-dynamic";
@@ -18,15 +18,14 @@ async function handlePOST(request: Request) {
   const rawBody = await request.text();
 
   if (!paystack.verifyWebhook(rawBody, request.headers)) {
-    console.error("[webhooks/paystack] signature verification failed");
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    throw new AppError("PAYSTACK_BAD_SIGNATURE", "Invalid signature", 401);
   }
 
   let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
   } catch {
-    return NextResponse.json({ error: "Malformed payload" }, { status: 400 });
+    throw new AppError("PAYSTACK_BAD_PAYLOAD", "Malformed payload", 400);
   }
 
   try {

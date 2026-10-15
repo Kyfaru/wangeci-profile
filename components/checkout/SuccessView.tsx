@@ -54,11 +54,11 @@ export function SuccessView({ reference }: { reference: string }) {
     } catch {
       /* private mode */
     }
-    const suffix = claimToken ? `?t=${encodeURIComponent(claimToken)}` : "";
+    const init: RequestInit = { cache: "no-store", headers: claimToken ? { "x-order-token": claimToken } : {} };
 
     async function tick() {
       try {
-        const res = await fetch(`/api/orders/${encodeURIComponent(reference)}${suffix}`, { cache: "no-store" });
+        const res = await fetch(`/api/orders/${encodeURIComponent(reference)}`, init);
         if (res.status === 404) return !cancelled && setMissing(true);
         if (res.ok) {
           let data = (await res.json()) as OrderView;
@@ -66,7 +66,7 @@ export function SuccessView({ reference }: { reference: string }) {
           // A new account whose session was not claimed yet (for example the page was opened fresh): claim it once.
           if (data.status === "PAID" && data.claimable && claimToken) {
             await fetch("/api/auth/checkout/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: data.id, token: claimToken }) }).catch(() => null);
-            const again = await fetch(`/api/orders/${encodeURIComponent(reference)}${suffix}`, { cache: "no-store" }).catch(() => null);
+            const again = await fetch(`/api/orders/${encodeURIComponent(reference)}`, init).catch(() => null);
             if (again?.ok) data = (await again.json()) as OrderView;
           }
           if (cancelled) return;
@@ -106,7 +106,17 @@ export function SuccessView({ reference }: { reference: string }) {
   }
 
   if (order?.status === "PAID") {
-    const invoiceHref = `/api/orders/${order.id}/invoice${token ? `?t=${encodeURIComponent(token)}` : ""}`;
+    // The order token goes in a header (not the URL), so the PDF is fetched and saved from here, not linked.
+    const downloadInvoice = async () => {
+      const res = await fetch(`/api/orders/${order.id}/invoice`, { headers: token ? { "x-order-token": token } : {} }).catch(() => null);
+      if (!res?.ok) return;
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${order.invoiceNumber ?? "invoice"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
     return (
       <div className={box} role="status">
         <h1 className="font-display text-4xl text-green md:text-5xl">Payment received</h1>
@@ -133,22 +143,16 @@ export function SuccessView({ reference }: { reference: string }) {
         <div className="mx-auto mt-10 max-w-md rounded-2xl bg-white p-5 text-left text-sm text-navy/80">
           <h2 className="font-medium text-navy">Signing in next time</h2>
           <p className="mt-2">
-            There is no password. Use the email <strong>{order.buyer.email}</strong>
-            {order.buyer.phone ? (
-              <>
-                {" "}
-                or the phone number <strong>{order.buyer.phone}</strong>
-              </>
-            ) : null}{" "}
-            you checked out with. We send a 4-digit code, you enter it, and you are in. Use the user icon at the top right of any page.
+            There is no password. Use the email <strong>{order.buyer.email}</strong> you checked out with. We send a 4-digit code, you enter it, and you are in.
+            You can add your phone number as a second way in from your account settings. Use the user icon at the top right of any page.
           </p>
         </div>
 
         <p className="mt-6 text-sm text-navy/60">
           A receipt and invoice were sent to your email, and a text message to your phone.{" "}
-          <a href={invoiceHref} className="underline underline-offset-4 hover:text-gold">
+          <button type="button" onClick={() => void downloadInvoice()} className="underline underline-offset-4 hover:text-gold">
             Download the invoice (PDF)
-          </a>
+          </button>
           {order.invoiceNumber ? ` · ${order.invoiceNumber}` : ""}
         </p>
       </div>

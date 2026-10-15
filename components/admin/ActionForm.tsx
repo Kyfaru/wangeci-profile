@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 
 import type { ActionResult } from "@/app/admin/actions";
+import { StepUp } from "@/components/auth/StepUp";
+import { StepUp } from "@/components/auth/StepUp";
 import { cn } from "@/lib/cn";
 
 type Action = (prev: ActionResult | null, form: FormData) => Promise<ActionResult>;
@@ -26,9 +28,12 @@ export function ActionForm({
   children?: ReactNode;
 }) {
   const [result, formAction, pending] = useActionState(action, null);
+  const form = useRef<HTMLFormElement>(null);
+  const [verified, setVerified] = useState(false); // set after a step-up so the stale stepUp answer stops showing the panel
+  const needsStepUp = result?.stepUp && !verified;
 
   return (
-    <form action={formAction} className="space-y-2">
+    <form ref={form} onSubmit={() => setVerified(false)} action={formAction} className="space-y-2">
       {Object.entries(hidden).map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
@@ -46,7 +51,15 @@ export function ActionForm({
       >
         {pending ? "Working..." : submitLabel}
       </button>
-      {result && (
+      {needsStepUp && (
+        <StepUp
+          onDone={() => {
+            setVerified(true);
+            form.current?.requestSubmit(); // retry the original action now that the code is proven
+          }}
+        />
+      )}
+      {result && !needsStepUp && (
         <p role="status" className={cn("text-sm", result.ok ? "text-green" : "text-error")}>
           {result.message}
         </p>

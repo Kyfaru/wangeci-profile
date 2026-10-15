@@ -118,7 +118,7 @@ async function onRefundProcessed(event: Extract<ProviderEvent, { type: "refund.p
   if (!done) return "noop";
 
   const titles = order.items.map((i) => i.edition.title ?? i.edition.work.title);
-  await Promise.allSettled([notify(order.userId, { type: "refund_completed", orderId: order.id, titles }, ["in_app"])]);
+  await Promise.allSettled([notify(order.userId, { type: "refund_completed", orderId: order.id, titles })]);
   return "refunded";
 }
 

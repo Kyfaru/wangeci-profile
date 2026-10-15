@@ -4,6 +4,7 @@ import { getProvider } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/server/audit";
 import { notify } from "@/lib/server/notifier";
+import { logError } from "@/lib/trace";
 
 /**
  * Every admin WRITE lives here. Each function:
@@ -59,14 +60,20 @@ export async function requestRefund(input: { orderId: string; actor: Actor; reas
   });
   if (!claimed) throw new AdminError("A refund has already been requested for this order.");
 
+  let result;
   try {
-    const result = await getProvider(order.provider).refund({ reference: order.providerReference, amount: Number(order.totalAmount), reason });
-    if (!result.ok) throw new Error("The provider did not accept the refund.");
+    result = await getProvider(order.provider).refund({ reference: order.providerReference, amount: Number(order.totalAmount), reason });
   } catch (error) {
-    const why = error instanceof Error ? error.message : "unknown error";
+    // A timeout or 5xx: the refund may well have been made. Clearing the pending mark here would let a second
+    // click refund the same payment again, so it stays pending (the signed refund event settles it).
+    logError("admin.refund-unconfirmed", error, { orderId: order.id, reference: order.providerReference });
+    throw new AdminError("The payment provider did not answer, so the refund may still go through. Check this payment in Paystack before trying again; the order stays marked as refund pending.");
+  }
+  if (!result.ok) {
+    // A definite "no": nothing was refunded, so the pending mark is cleared and the order stays PAID.
     await prisma.$transaction(async (tx) => {
       await tx.order.update({ where: { id: order.id }, data: { refundRequestedAt: null, refundRequestedById: null } });
-      await recordAudit({ adminId: input.actor.id, action: "refund.failed", targetType: "order", targetId: order.id, meta: { reason, error: why.slice(0, 300) }, ip: input.actor.ip }, tx);
+      await recordAudit({ adminId: input.actor.id, action: "refund.failed", targetType: "order", targetId: order.id, meta: { reason, error: "provider refused" }, ip: input.actor.ip }, tx);
     });
     throw new AdminError("The payment provider refused the refund. The order is unchanged.");
   }
@@ -96,7 +103,7 @@ export async function recordManualRefund(input: { orderId: string; actor: Actor;
   });
   if (!done) throw new AdminError("This order was already changed. Refresh the page.");
 
-  await notify(order.userId, { type: "refund_completed", orderId: order.id, titles: order.items.map((i) => i.edition.title ?? i.edition.work.title) }, ["in_app"]).catch(() => {});
+  await notify(order.userId, { type: "refund_completed", orderId: order.id, titles: order.items.map((i) => i.edition.title ?? i.edition.work.title) }).catch(() => {});
   return { ok: true };
 }
 

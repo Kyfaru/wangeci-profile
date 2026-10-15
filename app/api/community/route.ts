@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import { COMMENT_MAX_CHARS, FEEDBACK_MAX_CHARS, submitComment, submitFeedback } from "@/lib/community";
+import { clientIp } from "@/lib/rate-limit";
 import { getSessionUserId } from "@/lib/server/session";
 import { api, AppError } from "@/lib/trace";
 
@@ -21,7 +22,7 @@ async function handlePOST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) throw new AppError("COMMUNITY_INVALID", "Please check what you wrote and try again.", 400);
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(request.headers);
   const data = parsed.data;
   if (data.kind === "comment") await submitComment({ userId, ip, slug: data.slug, body: data.body });
   else await submitFeedback({ userId, ip, slug: data.slug, rating: data.rating, message: data.message });

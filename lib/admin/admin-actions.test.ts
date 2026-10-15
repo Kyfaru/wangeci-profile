@@ -86,15 +86,27 @@ describe.skipIf(!url)("admin writes (database)", () => {
     expect(mocks.refund).toHaveBeenCalledTimes(1);
   });
 
-  it("if the provider refuses, the order is unchanged and 'refund.failed' is recorded", async () => {
+  it("if the provider DEFINITELY refuses, the order is unchanged and 'refund.failed' is recorded", async () => {
     const admin = await user("owner");
     const { order } = await paidOrder();
-    mocks.refund.mockRejectedValueOnce(new Error("Paystack said no"));
+    mocks.refund.mockResolvedValueOnce({ ok: false });
     await expect(requestRefund({ orderId: order.id, actor: { id: admin.id }, reason: REASON })).rejects.toThrow(/refused/);
     const after = await db.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after.status).toBe("PAID");
     expect(after.refundRequestedAt).toBeNull();
     expect((await audit(order.id)).map((a) => a.action)).toEqual(["refund.requested", "refund.failed"]);
+  });
+
+  it("if the provider times out, the refund stays PENDING (it may have gone through) and cannot be double-clicked", async () => {
+    const admin = await user("owner");
+    const { order } = await paidOrder();
+    mocks.refund.mockRejectedValueOnce(new Error("The operation was aborted due to timeout"));
+    await expect(requestRefund({ orderId: order.id, actor: { id: admin.id }, reason: REASON })).rejects.toThrow(/Check this payment in Paystack/);
+    const after = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.refundRequestedAt).not.toBeNull();
+    expect((await audit(order.id)).map((a) => a.action)).toEqual(["refund.requested"]);
+    await expect(requestRefund({ orderId: order.id, actor: { id: admin.id }, reason: REASON })).rejects.toThrow(/already been requested/);
+    expect(mocks.refund).toHaveBeenCalledTimes(1);
   });
 
   it("refund guards: only PAID orders, and M-Pesa cannot be refunded automatically", async () => {

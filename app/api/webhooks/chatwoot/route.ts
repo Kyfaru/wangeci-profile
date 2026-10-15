@@ -1,9 +1,9 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { env } from "@/lib/env";
-import { supportBridge } from "@/lib/support-bridge";
-import { AppError, api } from "@/lib/trace";
+import { notifyAdmins } from "@/lib/server/notify-admins";
+import { AppError, api, safeEqual } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -27,18 +27,16 @@ function isValidSignature(rawBody: string, request: Request, secret: string): bo
   const timestamp = request.headers.get("x-chatwoot-timestamp") ?? "";
   const age = Math.abs(Date.now() / 1000 - Number(timestamp));
   if (!signature || !Number.isFinite(age) || age > MAX_AGE_SECONDS) return false;
-  const expected = Buffer.from(`sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`);
-  const received = Buffer.from(signature);
-  return expected.length === received.length && timingSafeEqual(expected, received);
+  return safeEqual(`sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`, signature);
 }
 
 /**
  * POST /api/webhooks/chatwoot: a visitor wrote in the chat widget. Puts one bell item in front of the
- * admins through the support seam. Agent replies and private notes are ignored. Retries are harmless:
- * the key is conversation + message id. Absent (404) unless CHATWOOT_WEBHOOK_SECRET is set.
+ * admins. Agent replies and private notes are ignored. Retries are harmless: the key is conversation +
+ * message id. Absent (404) unless CHATWOOT_WEBHOOK_SECRET is set.
  */
 export const POST = api("webhooks.chatwoot.post", async (request) => {
-  if (!env.CHATWOOT_WEBHOOK_SECRET) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!env.CHATWOOT_WEBHOOK_SECRET) throw new AppError("CHATWOOT_DISABLED", "Not found", 404);
 
   const rawBody = await request.text();
   if (!isValidSignature(rawBody, request, env.CHATWOOT_WEBHOOK_SECRET)) {
@@ -59,12 +57,14 @@ export const POST = api("webhooks.chatwoot.post", async (request) => {
   }
 
   const who = payload.sender ?? payload.contact;
-  await supportBridge.submit({
-    id: `chatwoot:${conversationId}:${payload.id}`,
-    name: who?.name || "A website visitor",
-    email: who?.email || "no email given",
-    message: (payload.content ?? "").slice(0, MAX_MESSAGE_CHARS),
-    source: "live chat",
+  const name = who?.name || "A website visitor";
+  await notifyAdmins({
+    type: "contact_message",
+    title: `New message from ${name}`,
+    body: `${name} <${who?.email || "no email given"}>\nvia live chat\n\n${(payload.content ?? "").slice(0, MAX_MESSAGE_CHARS)}`,
+    link: "/admin/inbox",
+    dedupeKey: `contact:chatwoot:${conversationId}:${payload.id}`,
+    urgent: true,
   });
   return NextResponse.json({ received: true });
 });

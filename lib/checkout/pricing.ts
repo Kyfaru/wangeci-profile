@@ -1,6 +1,7 @@
 /**
  * Checkout arithmetic, in whole CENTS (integers) so 0.1 + 0.2 style rounding errors can never move a price.
  * Shillings in, shillings out; cents inside. The server runs this for real; the browser only displays it.
+ * Discounts and fees are whole shillings: M-Pesa cannot collect cents, and one rule for every method is simpler.
  */
 export interface CouponRule {
   code: string;
@@ -18,26 +19,30 @@ export interface CouponRule {
 
 export type CouponResult = { ok: true; discount: number } | { ok: false; reason: string };
 
+/** The ONE refusal text for every reason a code cannot be used, so the answer never says which codes exist or why they fail. */
+export const COUPON_INVALID = "That code is not valid.";
+
 const toCents = (shillings: number) => Math.round(shillings * 100);
 const toShillings = (cents: number) => cents / 100;
 
-/** Why a coupon cannot be used right now, in a short sentence for the buyer. Reasons never reveal other codes. */
+/** Why a coupon cannot be used right now. The reason is always the same sentence (see COUPON_INVALID). */
 export function checkCoupon(rule: CouponRule | null, subtotal: number, now: Date): CouponResult {
-  if (!rule || !rule.isActive) return { ok: false, reason: "That code is not valid." };
-  if (rule.startsAt && now < rule.startsAt) return { ok: false, reason: "That code is not active yet." };
-  if (rule.endsAt && now > rule.endsAt) return { ok: false, reason: "That code has expired." };
-  if (rule.maxRedemptions !== null && rule.used >= rule.maxRedemptions) return { ok: false, reason: "That code has been fully used." };
-  if (rule.minSubtotal !== null && subtotal < rule.minSubtotal) return { ok: false, reason: `Spend at least KES ${rule.minSubtotal.toLocaleString("en-KE")} to use that code.` };
+  if (!rule || !rule.isActive) return { ok: false, reason: COUPON_INVALID };
+  if (rule.startsAt && now < rule.startsAt) return { ok: false, reason: COUPON_INVALID };
+  if (rule.endsAt && now > rule.endsAt) return { ok: false, reason: COUPON_INVALID };
+  if (rule.maxRedemptions !== null && rule.used >= rule.maxRedemptions) return { ok: false, reason: COUPON_INVALID };
+  if (rule.minSubtotal !== null && subtotal < rule.minSubtotal) return { ok: false, reason: COUPON_INVALID };
 
   const cents = toCents(subtotal);
-  const off = rule.type === "PERCENT" ? Math.round((cents * Math.min(100, Math.max(0, rule.value))) / 100) : toCents(Math.max(0, rule.value));
-  return { ok: true, discount: toShillings(Math.min(off, cents)) }; // a discount can never go below zero
+  const off = rule.type === "PERCENT" ? (cents * Math.min(100, Math.max(0, rule.value))) / 100 : toCents(Math.max(0, rule.value));
+  const wholeShillings = Math.round(off / 100);
+  return { ok: true, discount: Math.min(wholeShillings, toShillings(cents)) }; // a discount can never go below zero
 }
 
-/** Fee as a percentage of what is left after the discount (0 means no fee). */
+/** Fee as a percentage of what is left after the discount, in whole shillings (0 means no fee). */
 export function feeFor(afterDiscount: number, percent: number): number {
   if (!(percent > 0)) return 0;
-  return toShillings(Math.round((toCents(afterDiscount) * percent) / 100));
+  return Math.round((toCents(afterDiscount) * percent) / 10_000);
 }
 
 export interface Totals {

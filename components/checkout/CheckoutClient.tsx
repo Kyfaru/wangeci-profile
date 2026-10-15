@@ -119,10 +119,10 @@ export function CheckoutClient({
   /** Waits for the server (never the browser) to say PAID or FAILED, then moves the modal on. */
   async function waitForResult(orderId: string, claimToken: string | null) {
     const started = Date.now();
-    const suffix = claimToken ? `?t=${encodeURIComponent(claimToken)}` : "";
+    const headers: Record<string, string> = claimToken ? { "x-order-token": claimToken } : {};
     while (Date.now() - started < GIVE_UP_AFTER_MS) {
       await new Promise((r) => setTimeout(r, POLL_EVERY_MS));
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}${suffix}`, { cache: "no-store" }).catch(() => null);
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, { cache: "no-store", headers }).catch(() => null);
       if (!res?.ok) continue;
       const order = (await res.json()) as { status: string; failureReason: string | null; claimable: boolean };
       if (order.status === "PAID") return void (await succeed(orderId, claimToken, order.claimable));
@@ -162,13 +162,13 @@ export function CheckoutClient({
     }).catch(() => null);
     widget.current?.reset();
     setToken(null);
-    const data = (await res?.json().catch(() => ({}))) as { error?: string; code?: string; retryAfterSeconds?: number; contactSupport?: boolean; orderId?: string; free?: boolean; claimToken?: string | null; accessCode?: string | null; publicKey?: string } | undefined;
+    const data = (await res?.json().catch(() => ({}))) as { error?: string; requestId?: string; code?: string; retryAfterSeconds?: number; contactSupport?: boolean; orderId?: string; free?: boolean; claimToken?: string | null; accessCode?: string | null; publicKey?: string } | undefined;
     if (!res || !data) return fail("Could not reach the server.");
 
     if (!res.ok) {
-      if (data.code === "PAY_LOCKED") return fail(data.error ?? "Too many attempts.", { retryAt: Date.now() + (data.retryAfterSeconds ?? 0) * 1000, contactSupport: data.contactSupport });
+      if (data.code === "PAY_LOCKED") return fail(data.error ?? "Too many attempts.", { requestId: data.requestId, retryAt: Date.now() + (data.retryAfterSeconds ?? 0) * 1000, contactSupport: data.contactSupport });
       setBusy(false);
-      return setError(data.error ?? "Something went wrong. Please try again.");
+      return setError(`${data.error ?? "Something went wrong. Please try again."}${data.requestId ? ` (Reference: ${data.requestId})` : ""}`);
     }
 
     const orderId = data.orderId!;

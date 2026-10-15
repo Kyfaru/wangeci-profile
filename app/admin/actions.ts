@@ -24,13 +24,20 @@ import {
   setRole,
   type Actor,
 } from "@/lib/admin/actions";
+import { hasFreshStepUp, STEP_UP_ADMIN_MS } from "@/lib/auth/guards";
 import type { Action } from "@/lib/permissions";
+import { clientIp } from "@/lib/rate-limit";
 import { checkAdmin } from "@/lib/server/session";
 
 export interface ActionResult {
   ok: boolean;
   message: string;
+  /** True when the action was refused only because a fresh email code is needed (show the code prompt). */
+  stepUp?: boolean;
 }
+
+/** Actions that move money or change who may do what need an email code entered this recently. */
+const STEP_UP_ACTIONS: Action[] = ["order.refund", "roles.manage"];
 
 /**
  * Every admin server action starts here: the admin gate runs AGAIN on the server (a hidden button is
@@ -39,7 +46,10 @@ export interface ActionResult {
 async function run(permission: Action, change: (actor: Actor) => Promise<string>): Promise<ActionResult> {
   const check = await checkAdmin(permission);
   if (!check.ok) return { ok: false, message: "You are not allowed to do that." };
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  if (STEP_UP_ACTIONS.includes(permission) && !(await hasFreshStepUp(check.user.id, STEP_UP_ADMIN_MS))) {
+    return { ok: false, stepUp: true, message: "Please confirm it is you: request and enter a fresh email code, then try again." };
+  }
+  const ip = clientIp(await headers());
   try {
     const message = await change({ id: check.user.id, ip });
     revalidatePath("/admin", "layout");

@@ -27,7 +27,8 @@ vi.mock("@/lib/checkout/attempt-ladder", () => ({ payLadder: { clear: vi.fn(asyn
 vi.mock("@sentry/nextjs", () => ({ captureMessage: mocks.captureMessage, captureException: mocks.captureMessage }));
 
 import { applyProviderEvent } from "./apply-event";
-import { CheckoutError, createPendingOrder } from "./create";
+import { AppError } from "@/lib/trace";
+import { createPendingOrder } from "./create";
 
 describe.skipIf(!url)("money path (database)", () => {
   const db = new PrismaClient({ datasources: { db: { url: url ?? fallbackUrl } } });
@@ -219,13 +220,13 @@ describe.skipIf(!url)("money path (database)", () => {
   it("checkout rejects an edition the buyer already owns, and one that is not for sale", async () => {
     const { user, edition, work } = await fixtures();
     await db.entitlement.create({ data: { userId: user.id, editionId: edition.id } });
-    await expect(createPendingOrder({ userId: user.id, editionIds: [edition.id], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "ALREADY_OWNED", status: 409 });
+    await expect(createPendingOrder({ userId: user.id, editionIds: [edition.id], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "CHECKOUT_ALREADY_OWNED", status: 409 });
 
     const paperback = await db.edition.create({ data: { workId: work.id, format: "PAPERBACK", price: "10.00" } });
     const inactive = await db.edition.create({ data: { workId: work.id, format: "AUDIOBOOK", price: "10.00", isActive: false } });
     for (const id of [paperback.id, inactive.id]) {
-      await expect(createPendingOrder({ userId: user.id, editionIds: [id], provider: "PAYSTACK" })).rejects.toBeInstanceOf(CheckoutError);
+      await expect(createPendingOrder({ userId: user.id, editionIds: [id], provider: "PAYSTACK" })).rejects.toBeInstanceOf(AppError);
     }
-    await expect(createPendingOrder({ userId: user.id, editionIds: [], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "EMPTY" });
+    await expect(createPendingOrder({ userId: user.id, editionIds: [], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "CHECKOUT_CART_EMPTY" });
   });
 });

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 
 import { getKv } from "@/lib/auth/kv";
 import { env } from "@/lib/env";
-import { ProviderError, type PaymentProvider, type ProviderEvent, type VerifyResult } from "@/lib/payments/types";
+import { providerError, type PaymentProvider, type ProviderEvent, type VerifyResult } from "@/lib/payments/types";
 
 // M-Pesa Express (STK push) through Safaricom Daraja.
 // UNVERIFIED AGAINST OFFICIAL DOCS: developer.safaricom.co.ke could not be fetched (HTTP 404 for the
@@ -51,7 +51,7 @@ async function accessToken(): Promise<string> {
     signal: AbortSignal.timeout(10_000),
   });
   const json = (await res.json().catch(() => null)) as { access_token?: string; expires_in?: string } | null;
-  if (!res.ok || !json?.access_token) throw new ProviderError(`M-Pesa token request failed (${res.status})`);
+  if (!res.ok || !json?.access_token) throw providerError(`M-Pesa token request failed (${res.status})`);
   await kv.set(cacheKey, json.access_token, Math.max(60, Number(json.expires_in ?? 3599) - 120));
   return json.access_token;
 }
@@ -71,7 +71,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     res = await call(await accessToken());
   }
   const json = (await res.json().catch(() => null)) as T & { errorCode?: string; errorMessage?: string } | null;
-  if (!json) throw new ProviderError(`M-Pesa ${path} returned no JSON (${res.status})`);
+  if (!json) throw providerError(`M-Pesa ${path} returned no JSON (${res.status})`);
   return json;
 }
 
@@ -89,10 +89,10 @@ export const mpesa: PaymentProvider = {
   id: "MPESA",
 
   async initialize({ orderId, amount, buyer }) {
-    if (!mpesaConfigured()) throw new ProviderError("M-Pesa is not configured");
+    if (!mpesaConfigured()) throw providerError("M-Pesa is not configured");
     const phone = buyer.phone ? toMpesaPhone(buyer.phone) : null;
-    if (!phone) throw new ProviderError("A Kenyan M-Pesa phone number is required");
-    if (!Number.isInteger(amount) || amount < 1) throw new ProviderError("M-Pesa amounts must be whole shillings");
+    if (!phone) throw providerError("A Kenyan M-Pesa phone number is required");
+    if (!Number.isInteger(amount) || amount < 1) throw providerError("M-Pesa amounts must be whole shillings");
 
     const ts = timestamp();
     const shortcode = env.DARAJA_SHORTCODE!;
@@ -113,7 +113,7 @@ export const mpesa: PaymentProvider = {
       },
     );
     if (res.ResponseCode !== "0" || !res.CheckoutRequestID) {
-      throw new ProviderError(`M-Pesa refused the request: ${res.errorMessage ?? res.ResponseDescription ?? "unknown"}`);
+      throw providerError(`M-Pesa refused the request: ${res.errorMessage ?? res.ResponseDescription ?? "unknown"}`, "PAYMENT_PROVIDER_REFUSED");
     }
     return { reference: res.CheckoutRequestID, merchantRequestId: res.MerchantRequestID };
   },

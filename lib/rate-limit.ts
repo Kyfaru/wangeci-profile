@@ -2,6 +2,7 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 import { isRelaxed } from "@/lib/site";
+import { AppError } from "@/lib/trace";
 
 type Window = `${number} ${"s" | "m" | "h" | "d"}`;
 
@@ -66,4 +67,25 @@ export async function rateLimit(key: string, limit: number, window: Window): Pro
   return entry.count <= limit
     ? { ok: true, retryAfter: 0 }
     : { ok: false, retryAfter: Math.max(1, Math.ceil((entry.resetAt - now) / 1000)) };
+}
+
+/**
+ * Like rateLimit, but throws AppError(429) when over the limit, so a route handler can just `await limit(...)`
+ * and `api()` answers with the message and a Retry-After header.
+ */
+export async function limit(key: string, n: number, window: Window, message = "Too many requests. Please try again later."): Promise<void> {
+  const result = await rateLimit(key, n, window);
+  if (!result.ok) throw new AppError("RATE_LIMITED", message, 429, { retryAfter: result.retryAfter, key });
+}
+
+/**
+ * The caller's address for per-IP limits. `x-forwarded-for` is only trustworthy from the right: each trusted
+ * proxy appends the address it saw, so a client-supplied fake sits on the LEFT. TRUSTED_PROXY_HOPS is how many
+ * proxies sit in front of the app and append (Vercel: 1 and it overwrites; Coolify/Traefik: 1; behind
+ * Cloudflare + Traefik: 2). Missing or unparseable -> "unknown" (one shared bucket, never a bypass).
+ */
+export function clientIp(headers: Headers): string {
+  const parts = (headers.get("x-forwarded-for") ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+  const hops = Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS) || 1);
+  return parts[parts.length - hops] ?? "unknown";
 }

@@ -1,23 +1,21 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 
 import { env } from "@/lib/env";
-import { AppError, api } from "@/lib/trace";
+import { AppError, api, safeEqual } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
 /** Cache tag every Sanity fetch carries (see app/(marketing)/blog/sanity.ts). */
 const SANITY_TAG = "sanity";
-const MIN_TIMESTAMP_MS = 1609459200000; // the earliest a Sanity-signed payload can be dated (2021-01-01), as in @sanity/webhook
+const MAX_AGE_MS = 300_000; // replay guard: a signed payload older (or newer) than 5 minutes is refused
 
-/** Header is "t=<timestamp>,v1=<signature>"; signature = base64url(HMAC-SHA256(secret, "<t>.<raw body>")). */
+/** Header is "t=<timestamp ms>,v1=<signature>"; signature = base64url(HMAC-SHA256(secret, "<t>.<raw body>")). */
 function isValidSignature(rawBody: string, header: string | null, secret: string): boolean {
   const match = /^t=(\d+)[, ]+v1=([^, ]+)$/.exec((header ?? "").trim());
-  if (!match || Number(match[1]) < MIN_TIMESTAMP_MS) return false;
-  const expected = Buffer.from(createHmac("sha256", secret).update(`${match[1]}.${rawBody}`).digest("base64url"));
-  const received = Buffer.from(match[2]);
-  return expected.length === received.length && timingSafeEqual(expected, received);
+  if (!match || Math.abs(Date.now() - Number(match[1])) > MAX_AGE_MS) return false;
+  return safeEqual(createHmac("sha256", secret).update(`${match[1]}.${rawBody}`).digest("base64url"), match[2]);
 }
 
 /**
@@ -25,7 +23,7 @@ function isValidSignature(rawBody: string, header: string | null, secret: string
  * visit shows the new post. Absent (404) unless SANITY_WEBHOOK_SECRET is set.
  */
 export const POST = api("webhooks.sanity.post", async (request) => {
-  if (!env.SANITY_WEBHOOK_SECRET) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!env.SANITY_WEBHOOK_SECRET) throw new AppError("SANITY_DISABLED", "Not found", 404);
 
   const rawBody = await request.text();
   if (!isValidSignature(rawBody, request.headers.get("sanity-webhook-signature"), env.SANITY_WEBHOOK_SECRET)) {

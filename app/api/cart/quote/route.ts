@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { clientIp, limit } from "@/lib/rate-limit";
 import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +14,7 @@ const idsSchema = z.array(z.string().min(1).max(64)).min(1).max(10);
  * The browser cart is a shopping list; checkout re-reads every price from the database again.
  */
 async function handleGET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (!(await rateLimit(`quote:${ip}`, 60, "1 m")).ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  await limit(`quote:${clientIp(request.headers)}`, 60, "1 m");
 
   const parsed = idsSchema.safeParse((request.nextUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean));
   if (!parsed.success) return NextResponse.json({ items: [], total: 0, currency: "KES" });

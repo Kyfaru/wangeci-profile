@@ -3,8 +3,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 
-import { API_BASE_URL } from "@/lib/api/client";
-
 export interface ReaderPosition {
   editionId: string | null;
   chapterIdx: number;
@@ -49,7 +47,7 @@ function payload() {
  */
 export function useReadingProgressSync() {
   useEffect(() => {
-    const url = `${API_BASE_URL}/reading/progress`;
+    const url = "/api/reading/progress";
 
     const save = () => {
       const body = payload();

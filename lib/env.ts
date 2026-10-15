@@ -59,6 +59,8 @@ const envSchema = z.object({
   // Origins allowed to call the auth endpoints, besides BETTER_AUTH_URL.
   // Comma-separated (e.g. the staging domain). localhost is added only in development.
   TRUSTED_ORIGINS: z.string().optional(),
+  // How many reverse proxies in front of the app append to x-forwarded-for (see clientIp in lib/rate-limit.ts).
+  TRUSTED_PROXY_HOPS: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(1).max(5).optional()),
 
   // Upstash Redis (rate limits). Required in production, optional locally.
   UPSTASH_REDIS_REST_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
@@ -157,6 +159,10 @@ const envSchema = z.object({
   ] as const) {
     if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required in production` });
   }
+  // Test or sandbox keys on the real site would take "payments" that never move money (and grant nothing real).
+  if (!value.PAYSTACK_SECRET_KEY.startsWith("sk_live_")) ctx.addIssue({ code: "custom", path: ["PAYSTACK_SECRET_KEY"], message: "PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production" });
+  if (!value.PAYSTACK_PUBLIC_KEY.startsWith("pk_live_")) ctx.addIssue({ code: "custom", path: ["PAYSTACK_PUBLIC_KEY"], message: "PAYSTACK_PUBLIC_KEY must be a live key (pk_live_...) in production" });
+  if (value.DARAJA_ENV !== "production") ctx.addIssue({ code: "custom", path: ["DARAJA_ENV"], message: "DARAJA_ENV must be production in production" });
 });
 
 // Parsed on first import. `instrumentation.ts` imports this at server start in

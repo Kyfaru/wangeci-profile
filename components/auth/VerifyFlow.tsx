@@ -35,6 +35,7 @@ export function VerifyFlow({ complete, redirect, turnstileSiteKey }: { complete:
   const [cooldown, setCooldown] = useState(() => (!complete && flow ? RESEND_COOLDOWN_SECONDS : 0));
   const [token, setToken] = useState<string | null>(null);
   const [twoFactor, setTwoFactor] = useState(false);
+  const [replaceToken, setReplaceToken] = useState<string | null>(null);
   const [dial, setDial] = useState("+254");
   const [number, setNumber] = useState("");
   const widget = useRef<TurnstileHandle>(null);
@@ -90,7 +91,11 @@ export function VerifyFlow({ complete, redirect, turnstileSiteKey }: { complete:
     setBusy(false);
 
     if (res.error) {
-      if (res.error.code === "SESSION_ALREADY_ACTIVE") return setStep("blocked");
+      if (res.error.code === "SESSION_ALREADY_ACTIVE") {
+        // The refusal carries a one-time token proving the code was right; consent must send it back.
+        setReplaceToken((res.error as { replaceToken?: string }).replaceToken ?? null);
+        return setStep("blocked");
+      }
       setCode("");
       return setError(describeAuthError(res.error));
     }
@@ -151,11 +156,16 @@ export function VerifyFlow({ complete, redirect, turnstileSiteKey }: { complete:
     if (!flow) return;
     setBusy(true);
     setError(null);
-    await fetch("/api/session/replace-consent", {
+    const consent = await fetch("/api/session/replace-consent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: flow.identifier }),
-    });
+      body: JSON.stringify({ identifier: flow.identifier, token: replaceToken }),
+    }).catch(() => null);
+    if (!consent?.ok) {
+      setBusy(false);
+      return setError("Could not confirm. Please go back and enter your code again.");
+    }
+    setReplaceToken(null);
     const { error: err } = await sendCode(flow.via, flow.identifier, token);
     widget.current?.reset();
     setBusy(false);

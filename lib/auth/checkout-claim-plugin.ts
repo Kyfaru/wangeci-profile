@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { hashToken } from "@/lib/checkout/guest";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { logActivity } from "@/lib/server/activity";
 
 const CLAIM_WINDOW_MS = 24 * 3_600_000;
@@ -26,7 +26,7 @@ export const checkoutClaim = () =>
         { method: "POST", body: z.object({ orderId: z.string().min(1).max(64), token: z.string().min(16).max(128) }) },
         async (ctx) => {
           const deny = () => new APIError("FORBIDDEN", { code: "CLAIM_REFUSED", message: "This sign-in link is no longer valid. Please sign in with a code." });
-          const ip = ctx.request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+          const ip = ctx.request ? clientIp(ctx.request.headers) : "unknown";
           if (!(await rateLimit(`claim:${ip}`, 10, "10 m")).ok) throw new APIError("TOO_MANY_REQUESTS", { code: "CLAIM_RATE_LIMIT", message: "Too many attempts." });
 
           const order = await prisma.order.findUnique({ where: { id: ctx.body.orderId }, select: { id: true, userId: true, status: true, paidAt: true, accountCreated: true, claimTokenHash: true, claimedAt: true } });
@@ -34,8 +34,9 @@ export const checkoutClaim = () =>
           if (!order.paidAt || Date.now() - order.paidAt.getTime() > CLAIM_WINDOW_MS) throw deny();
           if (hashToken(ctx.body.token) !== order.claimTokenHash) throw deny(); // hashes of random secrets: no timing risk worth guarding
 
-          // One winner: the conditional update only succeeds while the order is still unclaimed.
-          const { count } = await prisma.order.updateMany({ where: { id: order.id, claimedAt: null }, data: { claimedAt: new Date() } });
+          // One winner: the conditional update only succeeds while the order is still unclaimed. The token is
+          // burned with it: from here the device reads the order through its new session, not the secret.
+          const { count } = await prisma.order.updateMany({ where: { id: order.id, claimedAt: null }, data: { claimedAt: new Date(), claimTokenHash: null } });
           if (count === 0) throw deny();
 
           const user = await ctx.context.internalAdapter.findUserById(order.userId);
@@ -44,7 +45,7 @@ export const checkoutClaim = () =>
           try {
             session = await ctx.context.internalAdapter.createSession(user.id);
           } catch (error) {
-            await prisma.order.updateMany({ where: { id: order.id }, data: { claimedAt: null } }); // nothing was issued, so the claim is not used up
+            await prisma.order.updateMany({ where: { id: order.id }, data: { claimedAt: null, claimTokenHash: order.claimTokenHash } }); // nothing was issued, so the claim is not used up
             throw error;
           }
           await setSessionCookie(ctx, { session, user });

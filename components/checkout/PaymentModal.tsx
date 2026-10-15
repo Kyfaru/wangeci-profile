@@ -11,6 +11,8 @@ export interface PayModalState {
   phase: PayPhase;
   method: "card" | "mpesa";
   reason?: string;
+  /** Server request id for support, shown under the reason. */
+  requestId?: string;
   /** When "Try again" unlocks (epoch ms). */
   retryAt?: number;
   /** The final 24 hour lock: no retry, point to support. */
@@ -138,6 +140,7 @@ export function PaymentModal({ state, onRetry, onClose }: { state: PayModalState
                 Payment failed
               </h2>
               <p className="mt-2 text-lg text-navy/80">{state.reason}</p>
+              {state.requestId && <p className="mt-1 text-sm text-navy/60">Reference: {state.requestId}</p>}
 
               {state.contactSupport ? (
                 <Link href="/contact" className="mt-6 inline-block rounded-2xl bg-navy px-6 py-3 text-cream hover:bg-gold">

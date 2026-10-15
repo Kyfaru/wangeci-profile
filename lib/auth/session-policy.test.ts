@@ -17,22 +17,31 @@ describe.skipIf(!url)("one active session per account (database)", () => {
   const email = `policy-${stamp}@example.com`;
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } });
+    await prisma.user.deleteMany({ where: { email: { in: [email, `other-${stamp}@example.com`] } } });
     await prisma.$disconnect();
   });
 
   it("allows, blocks, and replaces only with consent", async () => {
     const user = await prisma.user.create({ data: { name: "P", email, emailVerified: true } });
-    const who = { id: user.id, email: user.email, phoneNumber: null };
+    const who = { id: user.id };
 
     expect(await decideNewSession(who)).toBe("allow"); // nobody signed in yet
 
     await prisma.session.create({ data: { userId: user.id, token: `a-${stamp}`, expiresAt: new Date(Date.now() + 60_000) } });
-    expect(await decideNewSession(who)).toBe("block"); // second device, no consent
+    const refused = await decideNewSession(who);
+    expect(refused).toMatchObject({ block: { replaceToken: expect.any(String) } }); // second device, no consent
+    const { replaceToken } = (refused as { block: { replaceToken: string } }).block;
 
-    await grantReplaceConsent(email.toUpperCase()); // case does not matter
+    // Regression: consent cannot be pre-granted by identifier alone, nor with someone else's token.
+    expect(await grantReplaceConsent(email, "x".repeat(32))).toBe(false);
+    expect(await decideNewSession(who)).toMatchObject({ block: expect.anything() });
+    const other = await prisma.user.create({ data: { name: "O", email: `other-${stamp}@example.com`, emailVerified: true } });
+    expect(await grantReplaceConsent(other.email, replaceToken)).toBe(false);
+
+    expect(await grantReplaceConsent(email.toUpperCase(), replaceToken)).toBe(true); // case does not matter
+    expect(await grantReplaceConsent(email, replaceToken)).toBe(false); // the token is single use
     expect(await decideNewSession(who)).toBe("replace");
-    expect(await decideNewSession(who)).toBe("block"); // consent is single use
+    expect(await decideNewSession(who)).toMatchObject({ block: expect.anything() }); // consent is single use
 
     expect(await revokeOtherSessions(user.id)).toBe(1);
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
@@ -41,6 +50,6 @@ describe.skipIf(!url)("one active session per account (database)", () => {
   it("ignores expired sessions", async () => {
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
     await prisma.session.create({ data: { userId: user.id, token: `old-${stamp}`, expiresAt: new Date(Date.now() - 1000) } });
-    expect(await decideNewSession({ id: user.id, email, phoneNumber: null })).toBe("allow");
+    expect(await decideNewSession({ id: user.id })).toBe("allow");
   });
 });

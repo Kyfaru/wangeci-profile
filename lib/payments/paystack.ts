@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 
 import { env } from "@/lib/env";
-import { ProviderError, type PaymentProvider, type ProviderEvent, type VerifyResult } from "@/lib/payments/types";
+import { providerError, type PaymentProvider, type ProviderEvent, type VerifyResult } from "@/lib/payments/types";
+import { AppError } from "@/lib/trace";
 
 // Verified against https://paystack.com/docs/payments/webhooks/ , /docs/api/transaction/ and
 // /docs/api/refund/ on 2026-10-06:
@@ -32,7 +33,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     signal: AbortSignal.timeout(15_000),
   });
   const json = (await res.json().catch(() => null)) as { status?: boolean; message?: string; data?: T } | null;
-  if (!res.ok || !json?.status) throw new ProviderError(`Paystack ${path} failed: ${json?.message ?? res.status}`);
+  if (!res.ok || !json?.status) {
+    // A 4xx with Paystack's own JSON is a definite "no"; a 5xx or an unreadable body leaves the outcome unknown.
+    const refused = res.status < 500 && json?.status === false;
+    throw providerError(`Paystack ${path} failed: ${json?.message ?? res.status}`, refused ? "PAYMENT_PROVIDER_REFUSED" : undefined);
+  }
   return json.data as T;
 }
 
@@ -102,7 +107,13 @@ export const paystack: PaymentProvider = {
   },
 
   async refund({ reference, amount, reason }) {
-    await call("/refund", { method: "POST", body: JSON.stringify({ transaction: reference, amount: toMinor(amount), merchant_note: reason.slice(0, 200) }) });
-    return { ok: true };
+    try {
+      await call("/refund", { method: "POST", body: JSON.stringify({ transaction: reference, amount: toMinor(amount), merchant_note: reason.slice(0, 200) }) });
+      return { ok: true };
+    } catch (error) {
+      // Only a definite refusal is "ok: false". A timeout or 5xx may still have refunded: those are rethrown.
+      if (error instanceof AppError && error.code === "PAYMENT_PROVIDER_REFUSED") return { ok: false };
+      throw error;
+    }
   },
 };
