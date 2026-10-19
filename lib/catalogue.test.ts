@@ -12,7 +12,16 @@ vi.mock("@/lib/prisma", async () => {
   return { prisma: new Client({ datasources: { db: { url: process.env.TEST_DATABASE_URL ?? "postgresql://unused:unused@localhost:1/unused" } } }) };
 });
 
-import { getBookBySlug, getFreePreview, listBooks } from "./catalogue";
+import { FEATURED_BOOK_SLUG, getBookBySlug, getFreePreview, isComingSoon, listBooks } from "./catalogue";
+
+describe("isComingSoon", () => {
+  it("is true only for the featured book's slug when it has no published book", () => {
+    expect(FEATURED_BOOK_SLUG).toBe("from-pieces-to-power");
+    expect(isComingSoon(FEATURED_BOOK_SLUG, null)).toBe(true);
+    expect(isComingSoon("some-other-slug", null)).toBe(false);
+    expect(isComingSoon(FEATURED_BOOK_SLUG, { id: "w" } as never)).toBe(false);
+  });
+});
 
 describe.skipIf(!url)("catalogue (database)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: url ?? fallbackUrl } } });

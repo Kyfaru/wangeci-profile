@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 
+import { BOOK_HREF } from "@/lib/content/landing";
 import { prisma } from "@/lib/prisma";
 import { publicUrl } from "@/lib/r2";
 
@@ -102,5 +103,14 @@ export async function getFreePreview(slug: string): Promise<PreviewChapter | nul
   if (!chapter?.body) return null;
   return { idx: chapter.idx, title: chapter.title, paragraphs: chapter.body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean) };
 }
+
+/** The slug the landing page's "Get My Book" button points at; derived from BOOK_HREF so the two cannot drift. */
+export const FEATURED_BOOK_SLUG = BOOK_HREF.split("/").pop() as string;
+
+/**
+ * True when a missing book should show "coming soon" instead of a 404: the featured book is promoted
+ * everywhere, so before it is published (or while the database is down) a dead page would be wrong.
+ */
+export const isComingSoon = (slug: string, book: CatalogueBook | null) => !book && slug === FEATURED_BOOK_SLUG;
 
 export const formatPrice = (price: number, currency: string) => `${currency} ${price.toLocaleString("en-KE")}`;

@@ -36,6 +36,7 @@ const POLL_EVERY_MS = 3_000;
 const GIVE_UP_AFTER_MS = 3 * 60_000;
 
 const money = (n: number, c: string) => `${c} ${n.toLocaleString("en-KE", { minimumFractionDigits: n % 1 ? 2 : 0 })}`;
+const ERROR_ID = "checkout-error";
 const label = "text-sm font-medium text-navy/80";
 
 /**
@@ -69,12 +70,19 @@ export function CheckoutClient({
   const [coupon, setCoupon] = useState<string | undefined>();
   const [quote, setQuote] = useState<QuoteView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorField, setErrorField] = useState<"name" | "email" | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0); // bumped by "Retry" to reload the quote
+  const [notice, setNotice] = useState<string | null>(null);
+  const abandoned = useRef(false); // the buyer chose "Cancel and check later": stop reacting to this order
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [modal, setModal] = useState<PayModalState>({ phase: "idle", method: "card" });
   const widget = useRef<TurnstileHandle>(null);
 
   const ids = useMemo(() => [...new Set([...cartItems.filter((i) => i.editionId).map((i) => i.editionId as string), ...savedEditionIds])], [cartItems, savedEditionIds]);
+
+  const canPay = methods.includes("PAYSTACK") || methods.includes("MPESA");
 
   const loadQuote = useCallback(
     async (code?: string) => {
@@ -90,12 +98,16 @@ export function CheckoutClient({
     if (!hydrated || ids.length === 0) return;
     let cancelled = false;
     loadQuote(coupon)
-      .then((q) => !cancelled && setQuote(q))
-      .catch((e: Error) => !cancelled && setError(e.message));
+      .then((q) => {
+        if (cancelled) return;
+        setQuote(q);
+        setQuoteError(null);
+      })
+      .catch((e: Error) => !cancelled && setQuoteError(e.message));
     return () => {
       cancelled = true;
     };
-  }, [hydrated, ids, coupon, loadQuote]);
+  }, [hydrated, ids, coupon, loadQuote, attempt]);
 
   async function applyCoupon() {
     const code = couponInput.trim();
@@ -111,9 +123,22 @@ export function CheckoutClient({
     }
   }
 
+  function reject(message: string, field: "name" | "email" | null = null) {
+    setError(message);
+    setErrorField(field);
+  }
+
   function fail(reason: string, extra: Partial<PayModalState> = {}) {
     setBusy(false);
     setModal({ phase: "failed", method, reason, retryAt: Date.now() + RETRY_AFTER_FAILURE_MS, ...extra });
+  }
+
+  /** The buyer stops watching a slow payment. The order stays PENDING and the server-side reconcile settles it. */
+  function checkLater() {
+    abandoned.current = true;
+    setBusy(false);
+    setModal({ phase: "idle", method });
+    setNotice("Your payment is still being confirmed. We will email you once it is done, and your book will appear in your dashboard.");
   }
 
   /** Waits for the server (never the browser) to say PAID or FAILED, then moves the modal on. */
@@ -122,13 +147,14 @@ export function CheckoutClient({
     const headers: Record<string, string> = claimToken ? { "x-order-token": claimToken } : {};
     while (Date.now() - started < GIVE_UP_AFTER_MS) {
       await new Promise((r) => setTimeout(r, POLL_EVERY_MS));
+      if (abandoned.current) return;
       const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, { cache: "no-store", headers }).catch(() => null);
-      if (!res?.ok) continue;
+      if (!res?.ok || abandoned.current) continue;
       const order = (await res.json()) as { status: string; failureReason: string | null; claimable: boolean };
       if (order.status === "PAID") return void (await succeed(orderId, claimToken, order.claimable));
       if (order.status === "FAILED" || order.status === "EXPIRED") return fail(shortReason(order.failureReason));
     }
-    fail("We did not get a reply in time.");
+    if (!abandoned.current) fail("We did not get a reply in time.");
   }
 
   async function succeed(orderId: string, claimToken: string | null, claimable: boolean) {
@@ -140,18 +166,21 @@ export function CheckoutClient({
 
   async function pay() {
     setError(null);
-    if (!quote || quote.items.length === 0) return;
+    setErrorField(null);
+    setNotice(null);
+    if (!quote || quote.items.length === 0 || !canPay) return;
 
     let buyer: { firstName: string; lastName: string; email: string; phone: string } | undefined;
     if (!signedIn) {
       const phone = toE164(dial, number);
-      if (!first.trim() || !last.trim()) return setError("Enter your first and last name.");
-      if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError("Enter a valid email address.");
-      if (!phone) return setError("Enter a valid phone number.");
-      if (turnstileSiteKey && !token) return setError("Please complete the security check.");
+      if (!first.trim() || !last.trim()) return reject("Enter your first and last name.", "name");
+      if (!/^\S+@\S+\.\S+$/.test(email.trim())) return reject("Enter a valid email address.", "email");
+      if (!phone) return reject("Enter a valid phone number.");
+      if (turnstileSiteKey && !token) return reject("Please complete the security check.");
       buyer = { firstName: first.trim(), lastName: last.trim(), email: email.trim(), phone };
     }
 
+    abandoned.current = false;
     setBusy(true);
     setModal({ phase: "idle", method });
     const mpesaPhone = method === "mpesa" && mpesaOther.trim() ? toE164("+254", mpesaOther) ?? undefined : undefined;
@@ -184,7 +213,7 @@ export function CheckoutClient({
     if (data.free) return void (await succeed(orderId, claimToken, Boolean(claimToken)));
 
     if (method === "mpesa") {
-      setModal({ phase: "processing", method });
+      setModal({ phase: "processing", method, since: Date.now() });
       return void (await waitForResult(orderId, claimToken));
     }
 
@@ -194,10 +223,11 @@ export function CheckoutClient({
       const pop = new PaystackPop();
       pop.resumeTransaction(data.accessCode!, {
         onSuccess: () => {
-          setModal({ phase: "processing", method });
+          setModal({ phase: "processing", method, since: Date.now() });
           void waitForResult(orderId, claimToken);
         },
-        onCancel: () => fail("You closed the payment window."),
+        // Closing the popup is the buyer's choice, not a failure: no 15 s lock, retry is immediate.
+        onCancel: () => fail("You closed the payment window.", { cancelled: true, retryAt: undefined }),
         onError: () => fail("The card payment could not start."),
       });
     } catch {
@@ -205,7 +235,17 @@ export function CheckoutClient({
     }
   }
 
-  if (!hydrated) return <div className="mx-auto min-h-[70vh] max-w-[1080px] px-6 pb-24 pt-32 md:pt-40" />;
+  if (!hydrated) {
+    return (
+      <div className="mx-auto min-h-[70vh] max-w-[1080px] px-6 pb-24 pt-32 md:pt-40" aria-hidden>
+        <div className="h-12 w-56 animate-pulse rounded-xl bg-navy/10" />
+        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
+          <div className="h-72 animate-pulse rounded-[24px] bg-navy/10" />
+          <div className="h-72 animate-pulse rounded-[24px] bg-navy/10" />
+        </div>
+      </div>
+    );
+  }
   const empty = ids.length === 0 || (quote && quote.items.length === 0);
 
   return (
@@ -220,7 +260,14 @@ export function CheckoutClient({
           </Link>
         </div>
       ) : (
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault(); // Enter in any field pays, through the same checks as the button
+            void pay();
+          }}
+          className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]"
+        >
           <div className="space-y-8">
             <section aria-labelledby="s1" className="rounded-[24px] bg-white p-6 md:p-8">
               <h2 id="s1" className="flex items-center gap-3 font-display text-2xl text-navy">
@@ -236,21 +283,19 @@ export function CheckoutClient({
                   <div className="mt-5 grid gap-4 sm:grid-cols-2">
                     <label className="block">
                       <span className={label}>First name</span>
-                      <input value={first} onChange={(e) => setFirst(e.target.value)} autoComplete="given-name" className={cn(inputClass, "mt-1")} />
+                      <input value={first} onChange={(e) => setFirst(e.target.value)} autoComplete="given-name" aria-invalid={errorField === "name"} aria-describedby={errorField === "name" ? ERROR_ID : undefined} className={cn(inputClass, "mt-1")} />
                     </label>
                     <label className="block">
                       <span className={label}>Last name</span>
-                      <input value={last} onChange={(e) => setLast(e.target.value)} autoComplete="family-name" className={cn(inputClass, "mt-1")} />
+                      <input value={last} onChange={(e) => setLast(e.target.value)} autoComplete="family-name" aria-invalid={errorField === "name"} aria-describedby={errorField === "name" ? ERROR_ID : undefined} className={cn(inputClass, "mt-1")} />
                     </label>
                     <label className="block sm:col-span-2">
                       <span className={label}>Email</span>
-                      <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" inputMode="email" autoComplete="email" className={cn(inputClass, "mt-1")} />
+                      <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" inputMode="email" autoComplete="email" aria-invalid={errorField === "email"} aria-describedby={errorField === "email" ? ERROR_ID : undefined} className={cn(inputClass, "mt-1")} />
                     </label>
+                    {/* PhoneField labels its own number input ("Phone number"), so no second label here. */}
                     <div className="sm:col-span-2">
-                      <span className={label}>Phone number</span>
-                      <div className="mt-1">
-                        <PhoneField dialCode={dial} number={number} onDialCode={setDial} onNumber={setNumber} />
-                      </div>
+                      <PhoneField dialCode={dial} number={number} onDialCode={setDial} onNumber={setNumber} />
                     </div>
                   </div>
                   <p className="mt-3 text-xs text-navy/50">Already have an account with this email? Just pay: the book is added to it, then sign in with a code.</p>
@@ -278,7 +323,12 @@ export function CheckoutClient({
                   </label>
                 )}
               </div>
-              {method === "mpesa" && (
+              {!canPay && (
+                <p role="alert" className="mt-4 text-error">
+                  Payments are unavailable right now. Please try again later or <Link href="/contact" className="underline">contact us</Link>.
+                </p>
+              )}
+              {method === "mpesa" && canPay && (
                 <label className="mt-4 block">
                   <span className={label}>M-Pesa number (leave empty to use your phone number above)</span>
                   <input value={mpesaOther} onChange={(e) => setMpesaOther(e.target.value)} inputMode="tel" placeholder="0712 345 678" className={cn(inputClass, "mt-1")} />
@@ -291,7 +341,21 @@ export function CheckoutClient({
             <h2 id="sum" className="font-display text-2xl text-navy">
               Order summary
             </h2>
-            {!quote ? (
+            {quoteError && !quote ? (
+              <div role="alert" className="mt-4">
+                <p className="text-error">{quoteError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuoteError(null);
+                    setAttempt((a) => a + 1);
+                  }}
+                  className="mt-3 rounded-2xl border border-navy px-4 py-2 text-navy transition-colors hover:bg-navy hover:text-cream"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : !quote ? (
               <p className="mt-4 text-navy/60">Loading your order...</p>
             ) : (
               <>
@@ -305,7 +369,7 @@ export function CheckoutClient({
                 </ul>
 
                 <div className="mt-4 flex gap-2">
-                  <input value={couponInput} onChange={(e) => setCouponInput(e.target.value)} placeholder="Coupon code" aria-label="Coupon code" className={cn(inputClass, "min-w-0 flex-1 uppercase")} />
+                  <input value={couponInput} onChange={(e) => setCouponInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void applyCoupon(); } }} placeholder="Coupon code" aria-label="Coupon code" className={cn(inputClass, "min-w-0 flex-1 uppercase")} />
                   <button type="button" onClick={applyCoupon} className="shrink-0 rounded-2xl border border-navy px-4 text-navy transition-colors hover:bg-navy hover:text-cream">
                     Apply
                   </button>
@@ -332,24 +396,30 @@ export function CheckoutClient({
 
                 {!signedIn && <div className="mt-4"><TurnstileWidget ref={widget} siteKey={turnstileSiteKey} onToken={setToken} /></div>}
 
-                {error && (
-                  <p role="alert" className="mt-4 text-sm text-error">
-                    {error}
+                {(error || quoteError) && (
+                  <p role="alert" id={ERROR_ID} className="mt-4 text-sm text-error">
+                    {error ?? quoteError}
+                  </p>
+                )}
+                {notice && (
+                  <p role="status" className="mt-4 text-sm text-navy/80">
+                    {notice}
                   </p>
                 )}
 
-                <button type="button" onClick={pay} disabled={busy} data-umami-event="buy" className={cn(primaryButton, "mt-5")}>
+                <button type="submit" disabled={busy || !canPay} data-umami-event="buy" className={cn(primaryButton, "mt-5")}>
                   {busy ? "Starting payment..." : quote.total === 0 ? "Get my book" : `Pay ${money(quote.total, quote.currency)}`}
                 </button>
                 <p className="mt-3 text-center text-xs text-navy/50">You are only charged once the payment provider confirms it.</p>
               </>
             )}
           </aside>
-        </div>
+        </form>
       )}
 
       <PaymentModal
         state={modal}
+        onCheckLater={checkLater}
         onClose={() => {
           setBusy(false);
           setModal({ phase: "idle", method });

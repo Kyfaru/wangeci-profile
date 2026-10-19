@@ -2,18 +2,32 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { BuyButtons } from "@/components/store/BuyButtons";
-import { getBookBySlug, getFreePreview } from "@/lib/catalogue";
+import { ComingSoon } from "@/components/store/ComingSoon";
+import { getBookBySlug, getFreePreview, isComingSoon, type CatalogueBook } from "@/lib/catalogue";
 import { jsonLd } from "@/lib/json-ld";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/server/session";
 import { SITE } from "@/lib/site";
+import { logError } from "@/lib/trace";
 import { CommunityForms } from "@/components/community/CommunityForms";
 
 // Rendered per request (not at build time): the build has no database, and the catalogue is small and cheap to read.
 export const dynamic = "force-dynamic";
 
+/** The book, null when unknown, or "error" when the database could not be read (traced; the page then shows "coming soon", never app/error). */
+async function loadBook(slug: string): Promise<CatalogueBook | null | "error"> {
+  try {
+    return await getBookBySlug(slug);
+  } catch (error) {
+    logError("store.book", error, { slug });
+    return "error";
+  }
+}
+
 export async function generateMetadata({ params }: PageProps<"/store/[slug]">): Promise<Metadata> {
-  const book = await getBookBySlug((await params).slug);
+  const slug = (await params).slug;
+  const book = await loadBook(slug);
+  if (book === "error" || isComingSoon(slug, book)) return { title: SITE.bookTitle, robots: { index: false, follow: false } };
   if (!book) return {};
   const description = book.description ?? SITE.description;
   return {
@@ -26,7 +40,9 @@ export async function generateMetadata({ params }: PageProps<"/store/[slug]">): 
 
 /** `/store/[slug]` — Book Preview (Figma "Book Preview" frame). */
 export default async function BookPreviewPage({ params }: PageProps<"/store/[slug]">) {
-  const book = await getBookBySlug((await params).slug);
+  const slug = (await params).slug;
+  const book = await loadBook(slug);
+  if (book === "error" || isComingSoon(slug, book)) return <ComingSoon />;
   if (!book) notFound();
 
   const preview = await getFreePreview(book.slug);

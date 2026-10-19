@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer } from "@/components/marketing/Footer";
 import { Navbar } from "@/components/marketing/Navbar";
-import { BOOK_HREF } from "@/lib/content/landing";
 
 export const metadata: Metadata = { title: "Page not found", robots: { index: false } };
 
@@ -21,7 +20,7 @@ export default function NotFound() {
             <Link href="/" className="rounded-[40px] bg-navy px-8 py-3 text-lg font-medium text-cream transition-colors hover:bg-gold">
               Go home
             </Link>
-            <Link href={BOOK_HREF} className="rounded-[40px] border border-navy/30 px-8 py-3 text-lg font-medium transition-colors hover:border-gold hover:text-gold">
+            <Link href="/store" className="rounded-[40px] border border-navy/30 px-8 py-3 text-lg font-medium transition-colors hover:border-gold hover:text-gold">
               See the book
             </Link>
           </div>

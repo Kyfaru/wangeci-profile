@@ -17,7 +17,7 @@ interface OrderView {
   signedIn: boolean;
   claimable: boolean;
   buyer: { name: string; email: string; phone: string | null };
-  items: { title: string }[];
+  items: { title: string; slug: string }[];
 }
 
 const GIVE_UP_AFTER_MS = 5 * 60_000;
@@ -41,6 +41,7 @@ export function SuccessView({ reference }: { reference: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [invoiceError, setInvoiceError] = useState(false);
   const clearCart = useCartStore((s) => s.clear);
 
   useEffect(() => {
@@ -109,6 +110,7 @@ export function SuccessView({ reference }: { reference: string }) {
     // The order token goes in a header (not the URL), so the PDF is fetched and saved from here, not linked.
     const downloadInvoice = async () => {
       const res = await fetch(`/api/orders/${order.id}/invoice`, { headers: token ? { "x-order-token": token } : {} }).catch(() => null);
+      setInvoiceError(!res?.ok);
       if (!res?.ok) return;
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
@@ -127,8 +129,18 @@ export function SuccessView({ reference }: { reference: string }) {
         {order.signedIn ? (
           <>
             <p className="mt-4 text-navy/70">You are already signed in on this device.</p>
-            <Link href="/dashboard" className={button}>
-              Go to dashboard
+            <div className="flex flex-wrap items-center justify-center gap-x-4">
+              {order.items[0] && (
+                <Link href={`/dashboard/books/${order.items[0].slug}/read`} className={button}>
+                  Start reading
+                </Link>
+              )}
+              <Link href="/dashboard" className={button}>
+                Go to dashboard
+              </Link>
+            </div>
+            <Link href="/store" className="mt-4 inline-block text-sm text-navy/60 underline underline-offset-4 hover:text-gold">
+              Back to store
             </Link>
           </>
         ) : (
@@ -155,6 +167,11 @@ export function SuccessView({ reference }: { reference: string }) {
           </button>
           {order.invoiceNumber ? ` · ${order.invoiceNumber}` : ""}
         </p>
+        {invoiceError && (
+          <p role="alert" className="mt-2 text-sm text-error">
+            We could not download the invoice just now. Please try again, or find it in the email we sent you.
+          </p>
+        )}
       </div>
     );
   }
@@ -175,6 +192,10 @@ export function SuccessView({ reference }: { reference: string }) {
     return (
       <div className={box} role="status">
         <h1 className="font-display text-3xl">This order was refunded</h1>
+        <p className="mt-3 text-navy/70">This order was refunded. Access to this book was removed.</p>
+        <Link href="/contact" className={button}>
+          Contact us
+        </Link>
       </div>
     );
   }

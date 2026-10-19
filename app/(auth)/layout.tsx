@@ -13,7 +13,16 @@ const QUOTE = BOOK.blurb.split(". ")[0] + ".";
 /** Split screen from the Figma auth frames: form on the left, brand panel on the right. */
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
-    <div className="grid min-h-screen bg-white lg:grid-cols-2">
+    <div className="grid min-h-screen grid-rows-[auto_1fr] bg-white lg:grid-cols-2 lg:grid-rows-none">
+      {/* The brand panel is lg-only, so smaller screens get a bar with the way home. */}
+      <div className="col-span-full flex items-center justify-between px-6 pt-4 lg:hidden">
+        <Link href="/" className="flex min-h-11 items-center font-display text-xl text-navy">
+          {SITE.brand}
+        </Link>
+        <Link href="/" className="flex min-h-11 items-center rounded-full border border-navy/20 px-5 text-sm font-medium text-navy transition-colors hover:border-gold">
+          Back to site
+        </Link>
+      </div>
       <main className="flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-[5vw]">
         <div className="mx-auto w-full max-w-[420px]">{children}</div>
       </main>

@@ -19,7 +19,7 @@ export default function ErrorBoundary({ error, reset }: { error: Error & { diges
         </p>
         {error.digest && <p className="mt-2 text-sm text-navy/50">Reference: {error.digest}</p>}
         <div className="mt-8 flex flex-wrap justify-center gap-4">
-          <button onClick={reset} className="rounded-[40px] bg-navy px-8 py-3 text-lg font-medium text-cream transition-colors hover:bg-gold">
+          <button type="button" onClick={reset} className="rounded-[40px] bg-navy px-8 py-3 text-lg font-medium text-cream transition-colors hover:bg-gold">
             Try again
           </button>
           <Link href="/" className="rounded-[40px] border border-navy/30 px-8 py-3 text-lg font-medium transition-colors hover:border-gold hover:text-gold">

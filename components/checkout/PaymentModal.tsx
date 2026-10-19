@@ -17,9 +17,14 @@ export interface PayModalState {
   retryAt?: number;
   /** The final 24 hour lock: no retry, point to support. */
   contactSupport?: boolean;
+  /** The buyer closed the card window themselves: shown as "cancelled", with no retry lock. */
+  cancelled?: boolean;
+  /** When the processing phase began (epoch ms), to offer "Cancel and check later" after a minute. */
+  since?: number;
 }
 
 const ID = "pay-modal";
+const OFFER_CHECK_LATER_AFTER_MS = 60_000; // a PIN prompt or bank check that takes longer than this is likely stuck
 
 type OverlayApi = { open: (t: HTMLElement) => void; close: (t: HTMLElement) => void; autoInit: () => void };
 
@@ -34,7 +39,7 @@ const fmt = (ms: number) => {
  * retry button that unlocks after a countdown. Escape and backdrop clicks are off on purpose: a payment in
  * progress must not be dismissed by accident.
  */
-export function PaymentModal({ state, onRetry, onClose }: { state: PayModalState; onRetry: () => void; onClose: () => void }) {
+export function PaymentModal({ state, onRetry, onClose, onCheckLater }: { state: PayModalState; onRetry: () => void; onClose: () => void; onCheckLater: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const overlay = useRef<OverlayApi | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -73,13 +78,15 @@ export function PaymentModal({ state, onRetry, onClose }: { state: PayModalState
     };
   }, []);
 
-  // Countdown for the retry button.
+  // Clock for the retry countdown (failed) and for the "check later" offer (processing).
+  const ticking = (state.phase === "failed" && Boolean(state.retryAt)) || state.phase === "processing";
   useEffect(() => {
-    if (state.phase !== "failed" || !state.retryAt) return;
+    if (!ticking) return;
     const t = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(t);
-  }, [state.phase, state.retryAt]);
+  }, [ticking]);
 
+  const slow = state.phase === "processing" && Boolean(state.since) && now - (state.since ?? now) > OFFER_CHECK_LATER_AFTER_MS;
   const remaining = state.retryAt ? Math.max(0, state.retryAt - now) : 0;
   const locked = remaining > 0;
 
@@ -112,6 +119,11 @@ export function PaymentModal({ state, onRetry, onClose }: { state: PayModalState
                 {state.method === "mpesa" ? "Enter your M-Pesa PIN" : "Confirming your payment"}
               </h2>
               <p className="mt-2 text-navy/70">{state.method === "mpesa" ? "A prompt was sent to your phone. Enter your PIN to pay. Do not close this page." : "Please wait while the bank confirms. Do not close this page."}</p>
+              {slow && (
+                <button type="button" onClick={onCheckLater} className="mt-5 text-sm text-navy/60 underline underline-offset-4 hover:text-gold">
+                  Cancel and check later
+                </button>
+              )}
             </>
           )}
 
@@ -137,7 +149,7 @@ export function PaymentModal({ state, onRetry, onClose }: { state: PayModalState
                 </svg>
               </div>
               <h2 id={`${ID}-title`} className="mt-6 font-display text-2xl text-navy">
-                Payment failed
+                {state.cancelled ? "Payment cancelled" : "Payment failed"}
               </h2>
               <p className="mt-2 text-lg text-navy/80">{state.reason}</p>
               {state.requestId && <p className="mt-1 text-sm text-navy/60">Reference: {state.requestId}</p>}

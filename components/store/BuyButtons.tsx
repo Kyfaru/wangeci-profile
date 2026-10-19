@@ -69,7 +69,7 @@ export function BuyButtons({ slug, title, cover, ebook, audio }: BuyButtonsProps
         ) : (
           <button type="button" data-umami-event="add-to-cart" data-umami-event-format="ebook" onClick={() => buy(ebook, "Ebook")}className={`${pill} bg-white text-black hover:text-white`}>
             <MaskIcon name="basil--shopping-bag-solid" size="1.6em" />
-            Buy Book Now · {money(ebook.price, ebook.currency)}
+            Add Book to Cart ·{money(ebook.price, ebook.currency)}
           </button>
         ))}
       {audio ? (
@@ -81,7 +81,7 @@ export function BuyButtons({ slug, title, cover, ebook, audio }: BuyButtonsProps
         ) : (
           <button type="button" data-umami-event="add-to-cart" data-umami-event-format="audiobook" onClick={() => buy(audio, "Audiobook")}className={`${pill} border-2 border-white text-white hover:border-gold`}>
             <MaskIcon name="fluent--headphones-sound-wave-48-filled" size="1.4em" />
-            Buy Audiobook · {money(audio.price, audio.currency)}
+            Add Audiobook to Cart ·{money(audio.price, audio.currency)}
           </button>
         )
       ) : (
