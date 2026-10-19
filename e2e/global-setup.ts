@@ -11,6 +11,7 @@ export default async function globalSetup() {
   const stale = { user: { email: { startsWith: "e2e-" } } };
   for (const step of [
     () => prisma.entitlement.deleteMany({ where: stale }),
+    () => prisma.auditLog.deleteMany({ where: { admin: { email: { startsWith: "e2e-" } } } }),
     () => prisma.comment.deleteMany({ where: stale }),
     () => prisma.order.deleteMany({ where: stale }),
     () => prisma.user.deleteMany({ where: { email: { startsWith: "e2e-" } } }),
@@ -46,6 +47,7 @@ async function warmUp() {
     "/", "/checkout", "/checkout/success", "/store/test-media-book", "/sign-in", "/dashboard", "/admin", "/admin/sales",
     "/api/health", "/api/checkout", "/api/checkout/quote", "/api/community", "/api/auth/checkout/claim", "/api/orders/warm-up",
     "/api/notifications", "/api/user/owned", "/api/contact",
+    "/verify", "/store", "/dashboard/settings", "/dashboard/books/warm-up/read", "/admin/content", "/admin/content/warm-up",
   ];
   for (const p of paths) {
     await fetch(base + p, { redirect: "manual", signal: AbortSignal.timeout(170_000) }).catch(() => undefined);

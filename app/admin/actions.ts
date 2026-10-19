@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/trace";
@@ -24,6 +24,7 @@ import {
   setRole,
   type Actor,
 } from "@/lib/admin/actions";
+import { attachChapterAudio, createBook, deleteChapter, importManuscript, moveChapter, saveChapter } from "@/lib/admin/content";
 import { hasFreshStepUp, STEP_UP_ADMIN_MS } from "@/lib/auth/guards";
 import type { Action } from "@/lib/permissions";
 import { clientIp } from "@/lib/rate-limit";
@@ -171,3 +172,69 @@ export async function emailAlertsAction(_prev: ActionResult | null, form: FormDa
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// Book authoring (content.manage): drafts, chapters, audio, manuscript import.
+// ---------------------------------------------------------------------------
+
+const optional = (form: FormData, key: string) => text(form, key).trim() || undefined;
+
+export async function createBookAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await createBook({
+      actor,
+      title: text(form, "title"),
+      slug: text(form, "slug"),
+      author: text(form, "author"),
+      description: optional(form, "description"),
+      format: text(form, "format"),
+      price: Number(text(form, "price")),
+      currency: text(form, "currency") || "KES",
+      narrator: optional(form, "narrator"),
+    });
+    return "Book created as a draft. Add chapters, then publish it.";
+  });
+}
+
+export async function saveChapterAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await saveChapter({
+      actor,
+      editionId: text(form, "editionId"),
+      chapterId: optional(form, "chapterId"),
+      title: text(form, "title"),
+      body: text(form, "body"),
+      isFreePreview: text(form, "isFreePreview") === "on",
+      reason: optional(form, "reason"),
+    });
+    return "Chapter saved.";
+  });
+}
+
+export async function moveChapterAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await moveChapter({ actor, chapterId: text(form, "chapterId"), dir: text(form, "dir") === "up" ? "up" : "down", reason: optional(form, "reason") });
+    return "Chapter moved.";
+  });
+}
+
+export async function deleteChapterAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await deleteChapter({ actor, chapterId: text(form, "chapterId"), reason: optional(form, "reason") });
+    return "Chapter deleted.";
+  });
+}
+
+export async function attachChapterAudioAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await attachChapterAudio({ actor, chapterId: text(form, "chapterId"), key: text(form, "key"), durationSeconds: Math.round(Number(text(form, "durationSeconds"))), reason: optional(form, "reason") });
+    return "Audio attached.";
+  });
+}
+
+export async function importManuscriptAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    const { added } = await importManuscript({ actor, editionId: text(form, "editionId"), manuscript: text(form, "manuscript"), reason: optional(form, "reason") });
+    return `${added} chapters added.`;
+  });
+}

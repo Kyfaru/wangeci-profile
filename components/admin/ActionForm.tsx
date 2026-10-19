@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useActionState, useRef, useState, type ReactNode } from "react";
 
@@ -47,7 +47,7 @@ export function ActionForm({
       <button
         type="submit"
         disabled={pending}
-        className={cn("rounded-full px-5 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50", danger ? "bg-error hover:bg-black" : "bg-navy hover:bg-gold")}
+        className={cn("min-h-11 rounded-full px-5 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50", danger ? "bg-error hover:bg-black" : "bg-navy hover:bg-gold")}
       >
         {pending ? "Working..." : submitLabel}
       </button>

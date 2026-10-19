@@ -1,5 +1,6 @@
 ﻿import { z } from "zod";
 
+import { getPublishIssues } from "@/lib/admin/content";
 import { getProvider } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/server/audit";
@@ -21,7 +22,7 @@ export class AdminError extends Error {
 }
 
 export const reasonSchema = z.string().trim().min(10, "Please write a reason of at least 10 characters.").max(500);
-const reasonOrThrow = (reason: string) => {
+export const reasonOrThrow = (reason: string) => {
   const parsed = reasonSchema.safeParse(reason);
   if (!parsed.success) throw new AdminError(parsed.error.issues[0].message);
   return parsed.data;
@@ -206,9 +207,12 @@ export async function setCouponActive(input: { couponId: string; active: boolean
 export async function setEditionActive(input: { editionId: string; active: boolean; actor: Actor; reason: string }): Promise<{ ok: true }> {
   const reason = reasonOrThrow(input.reason);
   await prisma.$transaction(async (tx) => {
-    const edition = await tx.edition.findUnique({ where: { id: input.editionId }, include: { _count: { select: { chapters: true } } } });
+    const edition = await tx.edition.findUnique({ where: { id: input.editionId } });
     if (!edition) throw new AdminError("Edition not found.");
-    if (input.active && edition._count.chapters === 0) throw new AdminError("Add chapters before publishing this edition.");
+    if (input.active) {
+      const { blocking } = await getPublishIssues(edition.id, tx);
+      if (blocking.length > 0) throw new AdminError(`This edition is not ready to publish. ${blocking.slice(0, 3).join(" ")}`);
+    }
     await tx.edition.update({ where: { id: edition.id }, data: { isActive: input.active } });
     await recordAudit({ adminId: input.actor.id, action: input.active ? "edition.published" : "edition.retired", targetType: "edition", targetId: edition.id, meta: { reason }, ip: input.actor.ip }, tx);
   });

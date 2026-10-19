@@ -35,7 +35,7 @@ describe.skipIf(!url)("admin writes (database)", () => {
     const work = await db.work.create({ data: { slug: `adm-w-${stamp}-${n}`, title: "W", author: "A" } });
     made.works.push(work.id);
     const edition = await db.edition.create({ data: { workId: work.id, format: "EPUB", price: "500.00" } });
-    await db.chapter.create({ data: { editionId: edition.id, idx: 0, title: "c", wordCount: 1 } });
+    await db.chapter.create({ data: { editionId: edition.id, idx: 0, title: "c", body: "one", wordCount: 1 } });
     const order = await db.order.create({ data: { userId: buyer.id, totalAmount: "500.00", status: "PAID", provider, providerReference: `ref-${stamp}-${n}`, paidAt: new Date(), items: { create: { editionId: edition.id, unitPrice: "500.00" } } } });
     await db.entitlement.create({ data: { userId: buyer.id, editionId: edition.id, orderId: order.id } });
     return { buyer, edition, order, work };
@@ -194,7 +194,7 @@ describe.skipIf(!url)("admin writes (database)", () => {
     expect(await db.entitlement.count({ where: { userId: buyer.id, editionId: edition.id } })).toBe(1);
     await setEditionActive({ editionId: edition.id, active: true, actor: { id: admin.id }, reason: REASON });
     const empty = await db.edition.create({ data: { workId: edition.workId, format: "AUDIOBOOK", price: "1.00", isActive: false } });
-    await expect(setEditionActive({ editionId: empty.id, active: true, actor: { id: admin.id }, reason: REASON })).rejects.toThrow(/chapters/);
+    await expect(setEditionActive({ editionId: empty.id, active: true, actor: { id: admin.id }, reason: REASON })).rejects.toThrow(/at least one chapter/);
     expect((await audit(edition.id)).map((a) => a.action)).toEqual(["edition.retired", "edition.published"]);
   });
 });

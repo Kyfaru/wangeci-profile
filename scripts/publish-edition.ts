@@ -16,6 +16,9 @@ import path from "node:path";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { PrismaClient } from "@prisma/client";
 
+// @ts-expect-error node runs this file directly and needs the .ts extension; tsc (noEmit) would rather not have it
+import { countWords, normaliseBody } from "../lib/reading/text.ts";
+
 const args = process.argv.slice(2);
 const manifestPath = args.find((a) => !a.startsWith("--"));
 const flag = (name: string) => args.includes(`--${name}`);
@@ -116,18 +119,22 @@ async function main() {
     await prisma.asset.create({ data: { editionId: e.id, kind: "COVER_IMAGE", bucket: upload ? process.env.R2_BUCKET_PUBLIC! : "local", key: upload ? key : `/${manifest.cover}`, mimeType: mime(manifest.cover), sizeBytes: fs.statSync(abs(manifest.cover)).size } });
   }
 
+  // Assets of chapters this run replaces or removes. Deleted at the end so a re-run leaves no stale rows.
+  const existing = await prisma.chapter.findMany({ where: { editionId: e.id }, select: { idx: true, assetId: true } });
+  const staleAssetIds = existing.filter((x) => x.assetId && x.idx >= chapters.length).map((x) => x.assetId!);
+
   for (const [idx, c] of chapters.entries()) {
     let body: string | null = null;
     let assetId: string | null = null;
     let wordCount = 0;
     if (edition.format === "EPUB") {
-      body = fs.readFileSync(abs(c.file!), "utf8").replace(/\r\n/g, "\n").trim();
-      wordCount = body.split(/\s+/).length;
+      body = normaliseBody(fs.readFileSync(abs(c.file!), "utf8"));
+      wordCount = countWords(body);
     } else {
       // Optional text for the read-along view (shown while the narrator speaks).
       if (c.file) {
-        body = fs.readFileSync(abs(c.file), "utf8").replace(/\r\n/g, "\n").trim();
-        wordCount = body.split(/\s+/).length;
+        body = normaliseBody(fs.readFileSync(abs(c.file), "utf8"));
+        wordCount = countWords(body);
       }
       const ext = path.extname(c.audio!).toLowerCase();
       const key = `editions/${e.id}/audio/${String(idx).padStart(3, "0")}${ext}`;
@@ -140,7 +147,13 @@ async function main() {
       update: { title: c.title, body, wordCount, assetId, durationSeconds: c.durationSeconds ?? null, isFreePreview: Boolean(c.isFreePreview) },
       create: { editionId: e.id, idx, title: c.title, body, wordCount, assetId, durationSeconds: c.durationSeconds ?? null, isFreePreview: Boolean(c.isFreePreview) },
     });
+    const before = existing.find((x) => x.idx === idx)?.assetId;
+    if (before && before !== assetId) staleAssetIds.push(before);
   }
+
+  // The manifest is the whole book: chapters beyond it are gone, and so are the files they pointed at.
+  await prisma.chapter.deleteMany({ where: { editionId: e.id, idx: { gte: chapters.length } } });
+  await prisma.asset.deleteMany({ where: { id: { in: staleAssetIds } } });
 
   if (edition.format === "AUDIOBOOK") {
     await prisma.edition.update({ where: { id: e.id }, data: { durationSeconds: chapters.reduce((n, c) => n + (c.durationSeconds ?? 0), 0) } });

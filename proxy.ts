@@ -32,7 +32,7 @@ function buildCsp(nonce: string) {
     "img-src 'self' data: blob: https://*.r2.dev",
     "font-src 'self' data:",
     "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
-    `connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://challenges.cloudflare.com https://checkout.paystack.com https://api.paystack.co ${umamiOrigin} ${chatwootOrigin} ${chatwootSocket}`.replace(/ +/g, " ").trim(),
+    `connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://challenges.cloudflare.com https://checkout.paystack.com https://api.paystack.co https://*.r2.cloudflarestorage.com ${umamiOrigin} ${chatwootOrigin} ${chatwootSocket}`.replace(/ +/g, " ").trim(),
     `frame-src https://challenges.cloudflare.com https://checkout.paystack.com ${chatwootOrigin}`.trim(), // Turnstile widget, Paystack card popup, Chatwoot
     "object-src 'none'",
     "base-uri 'self'",
