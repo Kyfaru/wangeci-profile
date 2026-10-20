@@ -74,6 +74,9 @@ export function logError(name: string, error: unknown, meta: Record<string, unkn
   return { code, requestId };
 }
 
+/** Postgres rejects text containing \u0000 ("invalid byte sequence ... 0x00" / "string contains null byte"). */
+export const isNulByteError = (error: unknown) => error instanceof Error && /0x00|null byte|null character/i.test(error.message);
+
 /** Wraps a route handler: request id in, request id out, every failure traced and answered as JSON. */
 export function api<R extends Request, C = unknown>(name: string, handler: (request: R, ctx: C) => Promise<Response>): (request: R, ctx: C) => Promise<Response> {
   return async (request, ctx) => {
@@ -90,7 +93,9 @@ export function api<R extends Request, C = unknown>(name: string, handler: (requ
         const headers = new Headers(response.headers);
         headers.delete("content-length");
         return NextResponse.json({ ...body, requestId }, { status: response.status, headers });
-      } catch (error) {
+      } catch (rawError) {
+        // A NUL byte in any text field makes Postgres refuse the query: that is the caller's mistake (400), not a bug.
+        const error = isNulByteError(rawError) ? new AppError("INVALID_INPUT", "That input contains a character we cannot accept.", 400) : rawError;
         const { code } = logError(name, error, {}, requestId);
         const known = error instanceof AppError;
         const headers: Record<string, string> = { "x-request-id": requestId };

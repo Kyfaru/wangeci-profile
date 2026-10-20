@@ -41,6 +41,35 @@ export const e2ePhone = () => `+2547${String(Math.floor(Math.random() * 1e8)).pa
 /** The national part the checkout form wants after the +254 dial code. */
 export const nationalOf = (e164: string) => e164.replace(/^\+254/, "");
 
+/**
+ * Removes everything e2e/inputs.spec.ts creates: accounts whose email starts with "e2e-", books whose address starts with
+ * "e2e-inp-", coupons whose code starts with "E2EINP", and the sign-in codes left behind. Safe to run twice.
+ */
+export async function cleanupInputsRows() {
+  const prisma = db();
+  const users = await prisma.user.findMany({ where: { email: { startsWith: "e2e-" } }, select: { id: true } });
+  const userIds = users.map((u) => u.id);
+  const works = await prisma.work.findMany({ where: { slug: { startsWith: "e2e-inp-" } }, select: { id: true, editions: { select: { id: true } } } });
+  const editionIds = works.flatMap((w) => w.editions.map((e) => e.id));
+  const steps = [
+    () => prisma.readingPosition.deleteMany({ where: { OR: [{ editionId: { in: editionIds } }, { userId: { in: userIds } }] } }),
+    () => prisma.bookmark.deleteMany({ where: { OR: [{ editionId: { in: editionIds } }, { userId: { in: userIds } }] } }),
+    () => prisma.feedback.deleteMany({ where: { OR: [{ editionId: { in: editionIds } }, { userId: { in: userIds } }] } }),
+    () => prisma.comment.deleteMany({ where: { OR: [{ postSlug: { startsWith: "e2e-inp-" } }, { userId: { in: userIds } }] } }),
+    () => prisma.entitlement.deleteMany({ where: { OR: [{ editionId: { in: editionIds } }, { userId: { in: userIds } }] } }),
+    () => prisma.order.deleteMany({ where: { userId: { in: userIds } } }),
+    () => prisma.auditLog.deleteMany({ where: { adminId: { in: userIds } } }),
+    () => prisma.chapter.deleteMany({ where: { editionId: { in: editionIds } } }),
+    () => prisma.asset.deleteMany({ where: { editionId: { in: editionIds } } }),
+    () => prisma.edition.deleteMany({ where: { id: { in: editionIds } } }),
+    () => prisma.work.deleteMany({ where: { id: { in: works.map((w) => w.id) } } }),
+    () => prisma.coupon.deleteMany({ where: { code: { startsWith: "E2EINP" } } }),
+    () => prisma.verification.deleteMany({ where: { AND: [{ identifier: { contains: "e2e-" } }, { identifier: { contains: "@example.test" } }] } }),
+    () => prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+  ];
+  for (const step of steps) await step().catch((e: Error) => console.warn(`[e2e] inputs cleanup step skipped: ${e.message.split("\n").pop()}`));
+}
+
 /** Factory: a complete, valid account. Pass overrides for what the test cares about. */
 export function createUser(overrides: { email?: string; phoneNumber?: string | null; name?: string } = {}) {
   return db().user.create({

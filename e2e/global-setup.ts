@@ -1,4 +1,6 @@
-import { db, testDatabaseUrl } from "./db";
+import { rmSync } from "node:fs";
+
+import { cleanupInputsRows, db, testDatabaseUrl } from "./db";
 
 /**
  * Prepares the LOCAL test database: the two coupons the specs use, the test books if they are missing
@@ -7,6 +9,10 @@ import { db, testDatabaseUrl } from "./db";
 export default async function globalSetup() {
   process.env.DATABASE_URL ??= testDatabaseUrl(); // also the localhost guard
   const prisma = db();
+
+  // inputs.spec.ts keeps its signed-in browser states and responsive results here; every run starts from nothing.
+  rmSync("test-results/inputs", { recursive: true, force: true });
+  await cleanupInputsRows();
 
   const stale = { user: { email: { startsWith: "e2e-" } } };
   for (const step of [
@@ -35,6 +41,11 @@ export default async function globalSetup() {
     const work = await prisma.work.upsert({ where: { slug: b.slug }, create: { slug: b.slug, title: b.title, author: b.author }, update: {} });
     await prisma.edition.upsert({ where: { id: b.editionId }, create: { id: b.editionId, workId: work.id, format: "EPUB", price: b.price }, update: {} });
   }
+
+  // After the whole run: remove what inputs.spec.ts created (a worker restart must not delete rows mid-run, so it is not an afterAll).
+  return async () => {
+    await cleanupInputsRows();
+  };
 }
 
 /**
@@ -48,6 +59,9 @@ async function warmUp() {
     "/api/health", "/api/checkout", "/api/checkout/quote", "/api/community", "/api/auth/checkout/claim", "/api/orders/warm-up",
     "/api/notifications", "/api/user/owned", "/api/contact",
     "/verify", "/store", "/dashboard/settings", "/dashboard/books/warm-up/read", "/admin/content", "/admin/content/warm-up",
+    "/about", "/blog", "/services", "/contact", "/privacy", "/terms", "/refunds", "/cookies", "/cart", "/sign-up", "/no-such-page",
+    "/dashboard/books", "/dashboard/books/warm-up/listen", "/dashboard/bookmarks", "/dashboard/notifications", "/dashboard/activity",
+    "/admin/customers", "/admin/customers/warm-up", "/admin/inbox", "/admin/comments", "/admin/settings", "/admin/coupons", "/admin/roles", "/admin/audit", "/admin/sales/warm-up",
   ];
   for (const p of paths) {
     await fetch(base + p, { redirect: "manual", signal: AbortSignal.timeout(170_000) }).catch(() => undefined);
