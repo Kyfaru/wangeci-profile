@@ -10,6 +10,7 @@
 import { createHash, createHmac } from "node:crypto";
 
 import { PrismaClient } from "@prisma/client";
+import type { AdminNotice } from "@/lib/server/notify-admins";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +29,7 @@ const SECRETS = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   user: null as null | { id: string; email: string; role: string; phoneNumber: string | null; twoFactorEnabled: boolean; name: string; emailVerified: boolean; phoneNumberVerified: boolean; image: null },
-  notifyAdmins: vi.fn<(n: unknown) => Promise<void>>(async () => {}),
+  notifyAdmins: vi.fn<(n: AdminNotice) => Promise<void>>(async () => {}),
   initialize: vi.fn(async (input: { reference: string }) => ({ reference: input.reference || `ws_CO_${Math.random().toString(36).slice(2)}${Date.now()}`, accessCode: "ac_test", merchantRequestId: undefined as string | undefined })),
   applyProviderEvent: vi.fn(async (_e: unknown) => {}),
   reconcilePendingOrder: vi.fn(async () => "unchanged"),
@@ -1053,7 +1054,7 @@ describe.skipIf(!url)("route input matrix (database)", () => {
         expect(await snapshot()).toEqual(before);
       });
 
-      it.each([
+      it.each<[string, Record<string, unknown>]>([
         ["position 0 default", { position: undefined }],
         ["position 1e7", { position: 10_000_000 }],
         ["note 300", { note: "n".repeat(300) }],
@@ -1448,7 +1449,7 @@ describe.skipIf(!url)("route input matrix (database)", () => {
   // POST /api/admin/chapter-audio
   // -------------------------------------------------------------------------------------------------------
   describe("POST /api/admin/chapter-audio", () => {
-    const post = async (b: unknown, o: Opts = {}) => read(await adminAudioPOST(req("/api/admin/chapter-audio", { body: b, ...o })));
+    const post = async (b: unknown, o: Opts = {}) => read(await adminAudioPOST(req("/api/admin/chapter-audio", { body: b, ...o }), undefined));
     const good = (over: Record<string, unknown> = {}) => ({ editionId: book.audioEditionId, chapterId: book.audioChapterId, filename: "ch1.mp3", contentType: "audio/mpeg", sizeBytes: 5_000_000, ...over });
 
     it("should answer 403 for signed-out users, readers, and roles without content.manage", async () => {
@@ -1527,13 +1528,13 @@ describe.skipIf(!url)("route input matrix (database)", () => {
         ["array", "[]"],
         ["null", "null"],
       ])("should reject %s body with 400", async (_n, raw) => {
-        expectClientError(await read(await adminAudioPOST(req("/api/admin/chapter-audio", { raw }))), 400);
+        expectClientError(await read(await adminAudioPOST(req("/api/admin/chapter-audio", { raw }), undefined)), 400);
       });
 
       it("should answer 429 on the 61st upload url per hour for one admin and ip", async () => {
         const fixed = ip();
         let last = 0;
-        for (let i = 0; i < 61; i++) last = (await adminAudioPOST(req("/api/admin/chapter-audio", { body: good(), ip: fixed }))).status;
+        for (let i = 0; i < 61; i++) last = (await adminAudioPOST(req("/api/admin/chapter-audio", { body: good(), ip: fixed }), undefined)).status;
         expect(last).toBe(429);
       });
 
