@@ -24,10 +24,11 @@ vi.mock("@/lib/server/notify-admins", () => ({ notifyAdmins: mocks.notifyAdmins 
 vi.mock("@/lib/email", () => ({ sendEmail: vi.fn(async () => ({ id: "e" })) }));
 vi.mock("@/lib/sms", () => ({ sendSms: vi.fn(async () => ({})) }));
 vi.mock("@/lib/checkout/attempt-ladder", () => ({ payLadder: { clear: vi.fn(async () => {}) } }));
-vi.mock("@sentry/nextjs", () => ({ captureMessage: mocks.captureMessage, captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureMessage: mocks.captureMessage, captureException: mocks.captureMessage }));
 
 import { applyProviderEvent } from "./apply-event";
-import { CheckoutError, createPendingOrder } from "./create";
+import { AppError } from "@/lib/trace";
+import { createPendingOrder } from "./create";
 
 describe.skipIf(!url)("money path (database)", () => {
   const db = new PrismaClient({ datasources: { db: { url: url ?? fallbackUrl } } });
@@ -151,6 +152,40 @@ describe.skipIf(!url)("money path (database)", () => {
     expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(1);
   });
 
+  it("a dispute flags a PAID order once, keeps access, and an unknown reference is a noop", async () => {
+    const { order, user, reference } = await pendingOrder();
+    const owner = await db.user.create({ data: { name: "Owner", email: `owner-${stamp}-${seq}@example.com`, role: "owner" } });
+    created.users.push(owner.id);
+    await applyProviderEvent(success(reference));
+    mocks.notifyAdmins.mockClear();
+
+    const opened = { type: "dispute.opened", provider: "PAYSTACK", reference } as const;
+    expect(await applyProviderEvent(opened)).toBe("dispute_opened");
+    expect(await applyProviderEvent(opened)).toBe("dispute_opened"); // webhook retry
+    const alerts = mocks.notifyAdmins.mock.calls.map((c: unknown[]) => c[0] as { dedupeKey: string; urgent: boolean });
+    expect(new Set(alerts.map((a) => a.dedupeKey))).toEqual(new Set([`dispute:${order.id}`])); // same key: one bell item
+    expect(alerts.every((a) => a.urgent)).toBe(true);
+    expect(await db.auditLog.count({ where: { targetId: order.id, action: "dispute.opened" } })).toBe(1);
+
+    const after = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe("PAID");
+    expect(after.failureReason).toBe("dispute_open");
+    expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(1);
+
+    expect(await applyProviderEvent({ type: "dispute.resolved", provider: "PAYSTACK", reference, resolution: "declined" })).toBe("dispute_resolved");
+    expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(1);
+
+    expect(await applyProviderEvent({ type: "dispute.opened", provider: "PAYSTACK", reference: "never-issued" })).toBe("noop");
+  });
+
+  it("an amount mismatch stays blocked, and a dispute on an unpaid order is a noop", async () => {
+    const { order, user, reference } = await pendingOrder();
+    expect(await applyProviderEvent(success(reference, 50))).toBe("mismatch");
+    expect(await db.entitlement.count({ where: { userId: user.id } })).toBe(0);
+    expect(await applyProviderEvent({ type: "dispute.opened", provider: "PAYSTACK", reference })).toBe("noop"); // not PAID: nothing to flag
+    expect((await db.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe("PENDING");
+  });
+
   it("M-Pesa: a callback saying 'paid' is only trusted after Safaricom confirms it", async () => {
     const { user, reference } = await pendingOrder("MPESA");
     mocks.verify.mockResolvedValueOnce({ state: "pending" });
@@ -185,13 +220,13 @@ describe.skipIf(!url)("money path (database)", () => {
   it("checkout rejects an edition the buyer already owns, and one that is not for sale", async () => {
     const { user, edition, work } = await fixtures();
     await db.entitlement.create({ data: { userId: user.id, editionId: edition.id } });
-    await expect(createPendingOrder({ userId: user.id, editionIds: [edition.id], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "ALREADY_OWNED", status: 409 });
+    await expect(createPendingOrder({ userId: user.id, editionIds: [edition.id], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "CHECKOUT_ALREADY_OWNED", status: 409 });
 
     const paperback = await db.edition.create({ data: { workId: work.id, format: "PAPERBACK", price: "10.00" } });
     const inactive = await db.edition.create({ data: { workId: work.id, format: "AUDIOBOOK", price: "10.00", isActive: false } });
     for (const id of [paperback.id, inactive.id]) {
-      await expect(createPendingOrder({ userId: user.id, editionIds: [id], provider: "PAYSTACK" })).rejects.toBeInstanceOf(CheckoutError);
+      await expect(createPendingOrder({ userId: user.id, editionIds: [id], provider: "PAYSTACK" })).rejects.toBeInstanceOf(AppError);
     }
-    await expect(createPendingOrder({ userId: user.id, editionIds: [], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "EMPTY" });
+    await expect(createPendingOrder({ userId: user.id, editionIds: [], provider: "PAYSTACK" })).rejects.toMatchObject({ code: "CHECKOUT_CART_EMPTY" });
   });
 });

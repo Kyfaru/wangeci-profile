@@ -12,17 +12,6 @@ export function otp(code: string): string {
   return message.slice(0, MAX_SMS_LENGTH);
 }
 
-/** Sent after a successful order payment. */
-export function orderPaid(bookTitle: string): string {
-  const message = `Payment received! "${bookTitle}" is ready to read on Wangeci. Thanks for your order.`;
-  return message.slice(0, MAX_SMS_LENGTH);
-}
-
-/** Sent when an order is created but payment hasn't confirmed yet. */
-export function orderPending(): string {
-  return "Your Wangeci order is pending payment confirmation. We'll text you as soon as it's complete.";
-}
-
 /** Sent after a paid order: congratulations plus the dashboard link. Always 150 characters or fewer. */
 export function orderWelcome(dashboardUrl: string): string {
   return `Congratulations! Your Wangeci book is ready. Open your dashboard: ${dashboardUrl}`.slice(0, 150);

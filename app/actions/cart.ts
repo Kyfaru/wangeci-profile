@@ -4,8 +4,23 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/server/session";
+import { traced } from "@/lib/trace";
 
 const idsSchema = z.array(z.string().min(1).max(64)).max(10);
+
+/**
+ * Removes editions from the signed-in account's saved cart, so a book removed on /cart does not come back
+ * at checkout (which merges the saved cart). Guests have no saved cart: nothing to do. Never throws.
+ */
+export async function removeFromCart(editionIds: string[]): Promise<void> {
+  const parsed = idsSchema.safeParse(editionIds);
+  if (!parsed.success || parsed.data.length === 0) return;
+  await traced("cart.remove", async () => {
+    const session = await getSession();
+    if (!session) return;
+    await prisma.cartItem.deleteMany({ where: { editionId: { in: parsed.data }, cart: { userId: session.user.id } } });
+  });
+}
 
 /**
  * Merges the browser cart (a shopping list) into the account's saved cart after sign-in.

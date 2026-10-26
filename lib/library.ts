@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getBookBySlug } from "@/lib/catalogue";
+import { coverFrom, FALLBACK_COVER } from "@/lib/catalogue";
 import { prisma } from "@/lib/prisma";
 
 export type LibraryStatus = "not-started" | "in-progress" | "completed";
@@ -43,25 +43,29 @@ export async function getLibrary(userId: string): Promise<LibraryItem[]> {
     prisma.bookmark.groupBy({ by: ["editionId"], where: { userId, editionId: { in: editionIds } }, _count: true }),
   ]);
 
-  const items = await Promise.all(
-    rows.map(async (r): Promise<LibraryItem> => {
-      const format: LibraryFormat = r.edition.format === "EPUB" ? "ebook" : "audiobook";
-      const pct = positions.find((p) => p.editionId === r.editionId)?.progressPct ?? 0;
-      const slug = r.edition.work.slug;
-      const book = await getBookBySlug(slug); // for the cover; null if the edition was retired
-      return {
-        editionId: r.editionId,
-        slug,
-        title: r.edition.title ?? r.edition.work.title,
-        author: r.edition.work.author,
-        cover: book?.cover ?? "/images/from-pieces-to-power-front-cover.png",
-        format,
-        progressPercent: pct,
-        status: statusFor(pct),
-        bookmarkCount: marks.find((m) => m.editionId === r.editionId)?._count ?? 0,
-        href: `/dashboard/books/${slug}/${format === "ebook" ? "read" : "listen"}`,
-      };
-    }),
-  );
-  return items;
+  // Covers for every owned work in one query (retired editions keep their cover too).
+  const covers = await prisma.asset.findMany({
+    where: { kind: "COVER_IMAGE", edition: { workId: { in: rows.map((r) => r.edition.workId) } } },
+    orderBy: { createdAt: "asc" },
+    select: { bucket: true, key: true, edition: { select: { workId: true } } },
+  });
+
+  return rows.map((r): LibraryItem => {
+    const format: LibraryFormat = r.edition.format === "EPUB" ? "ebook" : "audiobook";
+    const pct = positions.find((p) => p.editionId === r.editionId)?.progressPct ?? 0;
+    const slug = r.edition.work.slug;
+    const cover = covers.find((c) => c.edition.workId === r.edition.workId);
+    return {
+      editionId: r.editionId,
+      slug,
+      title: r.edition.title ?? r.edition.work.title,
+      author: r.edition.work.author,
+      cover: (cover && coverFrom([cover])) ?? FALLBACK_COVER,
+      format,
+      progressPercent: pct,
+      status: statusFor(pct),
+      bookmarkCount: marks.find((m) => m.editionId === r.editionId)?._count ?? 0,
+      href: `/dashboard/books/${slug}/${format === "ebook" ? "read" : "listen"}`,
+    };
+  });
 }

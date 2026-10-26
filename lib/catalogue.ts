@@ -2,8 +2,10 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 
+import { BOOK_HREF } from "@/lib/content/landing";
 import { prisma } from "@/lib/prisma";
 import { publicUrl } from "@/lib/r2";
+import { splitParagraphs } from "@/lib/reading/text";
 
 /**
  * Read model for the public catalogue, built from Work, Edition, Asset and Chapter.
@@ -33,20 +35,25 @@ export interface CatalogueBook {
   editions: CatalogueEdition[];
 }
 
-const FALLBACK_COVER = "/images/from-pieces-to-power-front-cover.png";
+export const FALLBACK_COVER = "/images/from-pieces-to-power-front-cover.png";
 
-const bookInclude = {
-  editions: {
-    where: { isActive: true, format: { in: ["EPUB", "AUDIOBOOK"] } },
-    orderBy: { format: "asc" },
-    include: { assets: { where: { kind: "COVER_IMAGE" }, take: 1 }, _count: { select: { chapters: true } } },
-  },
-} satisfies Prisma.WorkInclude;
+const DIGITAL = { in: ["EPUB", "AUDIOBOOK"] } satisfies Prisma.EnumEditionFormatFilter;
+
+const editionsWhere = (where: Prisma.EditionWhereInput) =>
+  ({
+    editions: {
+      where: { format: DIGITAL, ...where },
+      orderBy: { format: "asc" },
+      include: { assets: { where: { kind: "COVER_IMAGE" }, take: 1 }, _count: { select: { chapters: true } } },
+    },
+  }) satisfies Prisma.WorkInclude;
+
+const bookInclude = editionsWhere({ isActive: true });
 
 type WorkRow = Prisma.WorkGetPayload<{ include: typeof bookInclude }>;
 
 /** bucket "local" means a file under /public (used by the seed); anything else is the public R2 bucket. */
-function coverFrom(assets: { bucket: string; key: string }[]): string | null {
+export function coverFrom(assets: { bucket: string; key: string }[]): string | null {
   const cover = assets[0];
   if (!cover) return null;
   return cover.bucket === "local" ? cover.key : publicUrl(cover.key);
@@ -83,6 +90,17 @@ export async function getBookBySlug(slug: string): Promise<CatalogueBook | null>
   return toBook(work);
 }
 
+/**
+ * The editions of this book that `userId` OWNS, active or not. Owners of a retired edition keep reading
+ * and listening (they paid for it), so the reader pages use this instead of getBookBySlug.
+ * Returns null when the book does not exist or the person owns none of its digital editions.
+ */
+export async function getOwnedBook(slug: string, userId: string): Promise<CatalogueBook | null> {
+  const work = await prisma.work.findUnique({ where: { slug }, include: editionsWhere({ entitlements: { some: { userId } } }) });
+  if (!work || work.editions.length === 0) return null;
+  return toBook(work);
+}
+
 export interface PreviewChapter {
   idx: number;
   title: string;
@@ -100,7 +118,16 @@ export async function getFreePreview(slug: string): Promise<PreviewChapter | nul
     select: { idx: true, title: true, body: true },
   });
   if (!chapter?.body) return null;
-  return { idx: chapter.idx, title: chapter.title, paragraphs: chapter.body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean) };
+  return { idx: chapter.idx, title: chapter.title, paragraphs: splitParagraphs(chapter.body) };
 }
+
+/** The slug the landing page's "Get My Book" button points at; derived from BOOK_HREF so the two cannot drift. */
+export const FEATURED_BOOK_SLUG = BOOK_HREF.split("/").pop() as string;
+
+/**
+ * True when a missing book should show "coming soon" instead of a 404: the featured book is promoted
+ * everywhere, so before it is published (or while the database is down) a dead page would be wrong.
+ */
+export const isComingSoon = (slug: string, book: CatalogueBook | null) => !book && slug === FEATURED_BOOK_SLUG;
 
 export const formatPrice = (price: number, currency: string) => `${currency} ${price.toLocaleString("en-KE")}`;

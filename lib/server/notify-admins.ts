@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { logError } from "@/lib/trace";
 
 import AdminAlertEmail from "@/emails/admin-alert-email";
 import { sendEmail } from "@/lib/email";
@@ -50,12 +51,14 @@ export async function notifyAdmins(notice: AdminNotice): Promise<void> {
     });
   }
 
-  if (notice.urgent && env.CONTACT_INBOX_EMAIL) {
+  // The owner can switch the urgent email off in /admin/settings (the bell item above is always written).
+  const emailOff = (await prisma.userPreferences.count({ where: { user: { role: "owner" }, emailNotifications: false } })) > 0;
+  if (notice.urgent && env.CONTACT_INBOX_EMAIL && !emailOff) {
     await sendEmail({
       to: env.CONTACT_INBOX_EMAIL,
       subject: notice.title,
       react: createElement(AdminAlertEmail, { title: notice.title, body: notice.body }),
       purpose: notice.type,
-    }).catch((error) => console.error("[notifyAdmins] email failed", error));
+    }).catch((error) => logError("notify-admins.email", error));
   }
 }

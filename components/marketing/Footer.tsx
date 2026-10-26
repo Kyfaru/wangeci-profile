@@ -49,10 +49,11 @@ function TextHoverEffect({
       height="100%"
       viewBox="0 0 300 100"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
-      className={cn("cursor-pointer select-none uppercase", className)}
+      className={cn("select-none uppercase", className)}
     >
       <defs>
         <linearGradient id="textGradient" gradientUnits="userSpaceOnUse" cx="50%" cy="50%" r="25%">
@@ -140,7 +141,7 @@ export function Footer() {
     phone && { icon: "lucide:phone", text: phone, href: contact.phone ? `tel:${contact.phone.replace(/\s/g, "")}` : undefined },
     place && { icon: "lucide:map-pin", text: place, href: undefined },
   ] as const).filter((r): r is { icon: AppIconName; text: string; href: string | undefined } => Boolean(r));
-  const socials = FOOTER.socials.filter((s) => s.href || !SITE.isProduction);
+  const socials = FOOTER.socials.filter((s) => s.href);
 
   return (
     <footer className="relative h-fit overflow-hidden bg-navy text-cream/80">
@@ -157,7 +158,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="mb-6 text-lg font-semibold text-white">Explore</h4>
+            <h2 className="mb-6 text-lg font-semibold text-white">Explore</h2>
             <ul className="space-y-3">
               {FOOTER.explore.map((l) => (
                 <li key={l.href}>
@@ -170,16 +171,20 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="mb-6 text-lg font-semibold text-white">Her Ventures</h4>
+            <h2 className="mb-6 text-lg font-semibold text-white">Her Ventures</h2>
             <ul className="space-y-3">
               {FOOTER.ventures.map((v) => (
-                <li key={v}>{v}</li>
+                <li key={v}>
+                  <Link href="/services" className={linkClass}>
+                    {v}
+                  </Link>
+                </li>
               ))}
             </ul>
           </div>
 
           <div>
-            <h4 className="mb-6 text-lg font-semibold text-white">Contact Us</h4>
+            <h2 className="mb-6 text-lg font-semibold text-white">Contact Us</h2>
             <ul className="space-y-4">
               {contactRows.map((row) => (
                 <li key={row.icon} className="flex items-center space-x-2 md:space-x-3">
@@ -193,6 +198,13 @@ export function Footer() {
                   )}
                 </li>
               ))}
+              {/* Always offered, so the column is never empty while the client's details are still null. */}
+              <li className="flex items-center space-x-2 md:space-x-3">
+                <AppIcon icon="lucide:mail" size={18} className="shrink-0 text-gold" />
+                <Link href="/contact" className={linkClass}>
+                  Contact form
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
@@ -200,13 +212,15 @@ export function Footer() {
         <hr className="my-8 border-t border-white/15" />
 
         <div className="flex flex-col items-center justify-between gap-4 text-sm md:flex-row">
-          <div className="flex space-x-6 text-white/60">
-            {socials.map((s) => (
-              <a key={s.label} href={s.href ?? undefined} aria-label={s.label} className={linkClass}>
-                <AppIcon icon={s.icon} size={20} />
-              </a>
-            ))}
-          </div>
+          {socials.length > 0 && (
+            <div className="flex space-x-6 text-white/60">
+              {socials.map((s) => (
+                <a key={s.label} href={s.href!} aria-label={s.label} className={linkClass}>
+                  <AppIcon icon={s.icon} size={20} />
+                </a>
+              ))}
+            </div>
+          )}
 
           {/* <div>, not <p>: a block <motion.div> inside <p> is invalid HTML and breaks hydration. */}
           <div className="flex items-center gap-1 text-xs text-white/50">
@@ -232,7 +246,7 @@ export function Footer() {
               >
                 <Image
                   src="/images/kyfaru-logo.png"
-                  alt="Kyfaru"
+                  alt=""
                   width={32}
                   height={32}
                   style={{ height: "auto" }}

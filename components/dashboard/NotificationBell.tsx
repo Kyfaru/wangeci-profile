@@ -7,8 +7,11 @@ import { MaskIcon } from "@/components/ui/MaskIcon";
 
 const POLL_MS = 60_000;
 
-/** Bell with an unread count. Polls one cheap route every 60 seconds (and again when the tab is shown). */
-export function NotificationBell() {
+/**
+ * Bell with an unread count, used by the dashboard and the admin panel. Polls one cheap route every
+ * 60 seconds (and again when the tab is shown). `compact` is the admin top bar's smaller size.
+ */
+export function NotificationBell({ href = "/dashboard/notifications", label = "Notifications", compact = false }: { href?: string; label?: string; compact?: boolean }) {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
@@ -17,7 +20,7 @@ export function NotificationBell() {
       fetch("/api/notifications/unread-count", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((d: { count?: number } | null) => d && !cancelled && setCount(d.count ?? 0))
-        .catch(() => {});
+        .catch(() => {}); // ponytail: a missed poll is retried in 60 s; the bell just keeps its last count
     void load();
     const id = window.setInterval(() => document.visibilityState === "visible" && void load(), POLL_MS);
     const onShow = () => document.visibilityState === "visible" && void load();
@@ -30,9 +33,13 @@ export function NotificationBell() {
   }, []);
 
   return (
-    <Link href="/dashboard/notifications" aria-label={count > 0 ? `Notifications, ${count} unread` : "Notifications"} className="relative grid size-11 place-items-center text-black transition-opacity hover:opacity-70">
-      <MaskIcon name="basil--notification-outline" size={28} />
-      {count > 0 && <span className="absolute right-0.5 top-0.5 grid min-w-5 place-items-center rounded-full bg-gold px-1 text-xs font-medium leading-5 text-white">{count > 99 ? "99+" : count}</span>}
+    <Link
+      href={href}
+      aria-label={count > 0 ? `${label}, ${count} unread` : label}
+      className={`relative grid place-items-center text-black transition-opacity hover:opacity-70 ${compact ? "size-10" : "size-11"}`}
+    >
+      <MaskIcon name="basil--notification-outline" size={compact ? 26 : 28} />
+      {count > 0 && <span className="absolute right-0 top-0 grid min-w-5 place-items-center rounded-full bg-gold px-1 text-xs font-medium leading-5 text-white">{count > 99 ? "99+" : count}</span>}
     </Link>
   );
 }

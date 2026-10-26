@@ -14,6 +14,8 @@ const LINKS: (AdminLink & { needs: Action })[] = [
   { label: "Sales", href: "/admin/sales", icon: "codicon--graph", needs: "sales.read" },
   { label: "Customers", href: "/admin/customers", icon: "basil--bookmark-outline", needs: "customers.read" },
   { label: "Inbox", href: "/admin/inbox", icon: "basil--notification-outline", needs: "messages.reply" },
+  { label: "Comments", href: "/admin/comments", icon: "basil--notification-outline", needs: "comments.moderate" },
+  { label: "Settings", href: "/admin/settings", icon: "bytesize--settings", needs: "messages.reply" },
   { label: "Coupons", href: "/admin/coupons", icon: "basil--bookmark-outline", needs: "coupon.manage" },
   { label: "Content", href: "/admin/content", icon: "meteor-icons--books", needs: "content.manage" },
   { label: "Roles", href: "/admin/roles", icon: "bytesize--settings", needs: "roles.manage" },

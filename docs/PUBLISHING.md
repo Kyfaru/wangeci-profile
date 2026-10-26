@@ -30,3 +30,15 @@ Flags: `--dry-run` checks everything and writes nothing. `--no-upload` writes on
 
 ## Before going live
 Replace every `TODO(client)` text, set real prices, and check the book page on staging.
+
+
+## Writing a book in the admin (no files, no scripts)
+The owner can author a book in the browser instead of using the manifest above.
+
+1. **Create the book** (title, address, author, format, price). It is a draft: `Edition.isActive` is false, so nothing is sold and nobody can see it.
+2. **Add chapters** one at a time, or paste a whole manuscript where each chapter starts with a line `## Chapter title` (text before the first `## ` is ignored). Import is for ebooks and is refused on a live edition that readers already own.
+3. **Audiobooks:** upload each chapter's MP3 or M4A (max 400 MB) from the chapter page. The browser sends it straight to the protected bucket (needs the CORS rule in `docs/R2_SETUP.md`); the server then checks the file exists and that its size fits the length you typed (64 to 400 kbps) before attaching it.
+4. **Preview** a draft as a reader with `/dashboard/books/<slug>/read?preview=<editionId>` (admins only; nothing is saved).
+5. **Publish.** It is refused while anything blocks it: price not above zero, no chapters, an ebook chapter with no text, an audiobook chapter with no audio or length, or chapter numbers with gaps. A missing free-preview chapter is only a warning.
+
+Rules to know: a reason (10+ characters) is only asked for once the edition is live or someone owns it. Chapters cannot be moved or deleted (only the last one can be deleted) once any reader has a saved place or bookmark in the book; text can still be edited. Owners of an edition that is later retired keep reading and listening. Every change is written to the audit log with word counts and a hash, never the chapter text.

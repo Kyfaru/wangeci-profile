@@ -29,3 +29,22 @@ export function audioProgressPercent(chapters: { idx: number; durationSeconds: n
   return Math.min(100, Math.round(((before + Math.min(Math.max(0, seconds), here)) / total) * 1000) / 10);
 }
 
+
+/**
+ * Which chapter (index into `chapters`) and word the reader opens at. An explicit `?idx=` link wins, then
+ * the saved position. If the wanted chapter no longer exists (the book was edited), start at the top of
+ * chapter 0: an old word offset means nothing in a different chapter.
+ */
+export function resolveStart(
+  sp: { idx?: string | string[]; w?: string | string[] },
+  resume: { chapterIdx: number; offset: number } | null,
+  chapters: { idx: number; wordCount: number }[],
+): { position: number; startWord: number } {
+  const explicit = typeof sp.idx === "string";
+  const wantedIdx = explicit ? Number(sp.idx) : resume?.chapterIdx;
+  const position = chapters.findIndex((c) => c.idx === wantedIdx);
+  if (position < 0) return { position: 0, startWord: 0 };
+  if (!explicit) return { position, startWord: resume?.offset ?? 0 };
+  const w = typeof sp.w === "string" ? sp.w : "";
+  return { position, startWord: w === "end" ? Math.max(0, chapters[position].wordCount - 1) : Math.max(0, Number(w) || 0) };
+}

@@ -4,6 +4,10 @@ export const E164_REGEX = /^\+\d{10,15}$/;
 
 export const isE164 = (value: string) => E164_REGEX.test(value);
 
+/** "jane@x.com" to "j***@x.com": what someone who is not the account owner may see of a contact detail. */
+export const maskEmail = (e: string) => e.replace(/^(.).*(@.*)$/, "$1***$2");
+export const maskPhone = (p: string | null) => (p ? `${p.slice(0, 4)}***${p.slice(-3)}` : null);
+
 /** "0712 345 678" or "+254 712 345 678" to "+254712345678". Returns null if it cannot be made valid. */
 export function normalizeKenyanOrE164(input: string): string | null {
   const compact = input.replace(/[\s()-]/g, "");

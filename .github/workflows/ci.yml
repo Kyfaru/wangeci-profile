@@ -7,6 +7,17 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # A throwaway Postgres for the end-to-end step. Its credentials match DATABASE_URL below.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U user -d ci" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       # Placeholder values only so `prisma validate` can read the schema. No real secrets in CI.
       DATABASE_URL: postgresql://user:pass@localhost:5432/ci
@@ -24,3 +35,34 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build # builds with no runtime secrets, like the Dockerfile
+      # End-to-end tests (Playwright). Assumptions: the Postgres service above is the test database,
+      # migrations are applied to it here, e2e/global-setup.ts seeds the coupons and test books, and the app
+      # runs as pnpm dev with the placeholder secrets below (no payment, email or SMS provider is called).
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test
+        env:
+          NODE_ENV: development
+          NEXT_PUBLIC_SITE_ENV: development
+          BETTER_AUTH_SECRET: ci-only-better-auth-secret-0123456789abcdef
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ci-only-actions-key-0123456789abcdef0123
+          PAYSTACK_SECRET_KEY: sk_test_ci_placeholder
+          PAYSTACK_PUBLIC_KEY: pk_test_ci_placeholder
+          R2_ACCOUNT_ID: ci
+          R2_ACCESS_KEY_ID: ci
+          R2_SECRET_ACCESS_KEY: ci
+          R2_BUCKET_PUBLIC: ci-public
+          R2_BUCKET_PROTECTED: ci-protected
+          RESEND_API_KEY: re_ci_placeholder
+          RESEND_WEBHOOK_SECRET: ci
+          AT_USERNAME: ci
+          AT_API_KEY: ci
+          AT_SENDER_ID: ci
+          ADMIN_EMAIL_ALLOWLIST: admin@example.test
+          BETTER_AUTH_URL: http://localhost:3123
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore

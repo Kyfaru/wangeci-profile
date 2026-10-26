@@ -24,6 +24,8 @@ interface ChapterReaderProps {
   wordsBefore: number;
   wordsInChapter: number;
   totalWords: number;
+  /** Admin preview of a draft edition: keeps the preview flag on chapter links (nothing is saved). */
+  previewId?: string;
 }
 
 /**
@@ -32,7 +34,7 @@ interface ChapterReaderProps {
  * the pages are measured on this screen with this font size. The position that is saved is the first
  * WORD on the page, which every device agrees on.
  */
-export function ChapterReader({ slug, editionId, chapterIdx, title, paragraphs, startWord, prevIdx, nextIdx, wordsBefore, wordsInChapter, totalWords }: ChapterReaderProps) {
+export function ChapterReader({ slug, editionId, chapterIdx, title, paragraphs, startWord, prevIdx, nextIdx, wordsBefore, wordsInChapter, totalWords, previewId }: ChapterReaderProps) {
   const router = useRouter();
   const viewRef = useRef<HTMLDivElement>(null);
   const flowRef = useRef<HTMLDivElement>(null);
@@ -144,14 +146,15 @@ export function ChapterReader({ slug, editionId, chapterIdx, title, paragraphs, 
   }, [editionId, chapterIdx, wordStart, wordEnd, setPosition]);
 
   const base = `/dashboard/books/${slug}/read`;
+  const previewQuery = previewId ? `&preview=${previewId}` : "";
   const goNext = useCallback(() => {
     if (page < pages - 1) setPage(page + 1);
-    else if (nextIdx !== null) router.push(`${base}?idx=${nextIdx}`);
-  }, [page, pages, nextIdx, router, base]);
+    else if (nextIdx !== null) router.push(`${base}?idx=${nextIdx}${previewQuery}`);
+  }, [page, pages, nextIdx, router, base, previewQuery]);
   const goPrev = useCallback(() => {
     if (page > 0) setPage(page - 1);
-    else if (prevIdx !== null) router.push(`${base}?idx=${prevIdx}&w=end`);
-  }, [page, prevIdx, router, base]);
+    else if (prevIdx !== null) router.push(`${base}?idx=${prevIdx}&w=end${previewQuery}`);
+  }, [page, prevIdx, router, base, previewQuery]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

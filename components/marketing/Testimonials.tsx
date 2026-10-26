@@ -18,7 +18,7 @@ export function Testimonials() {
 
   // Keyed on `active`, so a manual change restarts the 5s clock.
   useEffect(() => {
-    if (paused) return;
+    if (paused || total < 2) return;
     const id = setTimeout(() => setActive((a) => (a + 1) % total), AUTO_MS);
     return () => clearTimeout(id);
   }, [active, paused, total]);

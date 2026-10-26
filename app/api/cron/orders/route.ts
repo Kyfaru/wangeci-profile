@@ -5,7 +5,9 @@ import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { reconcilePendingOrder } from "@/lib/orders/apply-event";
 import { purgeAbandonedGuestAccounts } from "@/lib/checkout/abandoned";
+import { afterOrderPaid } from "@/lib/orders/post-paid";
 import { prisma } from "@/lib/prisma";
+import { api, logError, traced } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,7 +32,7 @@ function authorised(request: Request): boolean {
  *  3. Delete contact-form bell items older than 90 days.
  *  4. Delete accounts that checkout created but nobody ever paid for or signed in to (after 7 days).
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   if (!authorised(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = Date.now();
@@ -46,15 +48,30 @@ export async function GET(request: Request) {
       const result = await reconcilePendingOrder(id);
       outcomes[result] = (outcomes[result] ?? 0) + 1;
     } catch (error) {
-      console.error("[cron] reconcile failed", id, error);
+      logError("cron.reconcile", error, { orderId: id });
       outcomes.error = (outcomes.error ?? 0) + 1;
     }
   }
+
+  // A PAID order whose receipt email never went out (the process died after the payment, or Resend was down).
+  // Judged per buyer, not per order: someone who bought twice in a day and got one receipt is not caught.
+  const unreceipted = await prisma.order.findMany({
+    where: {
+      status: "PAID",
+      paidAt: { gt: new Date(now - DAY), lt: new Date(now - 5 * MIN) },
+      user: { notificationLogs: { none: { channel: "EMAIL", purpose: "order-paid", status: { not: "FAILED" }, createdAt: { gt: new Date(now - DAY) } } } },
+    },
+    select: { id: true },
+    take: 25,
+  });
+  for (const { id } of unreceipted) await traced("cron.resend-receipt", () => afterOrderPaid(id), { orderId: id });
 
   const expired = await prisma.order.updateMany({ where: { status: "PENDING", createdAt: { lt: new Date(now - DAY) } }, data: { status: "EXPIRED", failureReason: "expired_unpaid" } });
   const purged = await prisma.notificationLog.deleteMany({ where: { channel: "IN_APP", purpose: "contact_message", createdAt: { lt: new Date(now - 90 * DAY) } } });
 
   const purgedAccounts = await purgeAbandonedGuestAccounts(new Date(now - 7 * DAY));
 
-  return NextResponse.json({ checked: stuck.length, outcomes, expired: expired.count, purgedMessages: purged.count, purgedAccounts });
+  return NextResponse.json({ checked: stuck.length, outcomes, receiptsResent: unreceipted.length, expired: expired.count, purgedMessages: purged.count, purgedAccounts });
 }
+
+export const GET = api("cron.orders.get", handleGET);

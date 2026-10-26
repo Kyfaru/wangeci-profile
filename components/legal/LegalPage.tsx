@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
 
+import { SITE } from "@/lib/site";
+
+/** Placeholder text for the client or their lawyer: shown while building, never in production. */
+export function Todo({ children }: { children: ReactNode }) {
+  return SITE.isProduction ? null : <>{children}</>;
+}
+
 /** Shared layout for the legal pages. Every legal page is a DRAFT until the client's lawyer has reviewed it. */
 export function LegalPage({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
   return (

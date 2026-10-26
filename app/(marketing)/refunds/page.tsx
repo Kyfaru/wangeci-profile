@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { LegalPage } from "@/components/legal/LegalPage";
+import { LegalPage, Todo } from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = { title: "Refund Policy", alternates: { canonical: "/refunds" } };
 
 export default function RefundsPage() {
   return (
     <LegalPage title="Refund Policy" updated="6 October 2026 (draft)">
-      <p>Digital books are delivered straight to your account, so refunds are handled case by case. TODO(client): the refund window (for example the number of days) and the conditions.</p>
+      <p>Digital books are delivered straight to your account, so refunds are handled case by case. <Todo>TODO(client): the refund window (for example the number of days) and the conditions.</Todo></p>
 
       <h2>When we will refund</h2>
       <ul>
@@ -25,8 +25,8 @@ export default function RefundsPage() {
 
       <h2>What happens when we refund</h2>
       <p>
-        We start the refund with the payment provider. Your access to the book is removed when the provider confirms the refund. Card refunds go back to your card;
-        TODO(client): how M-Pesa refunds are paid back and how long they take.
+        We start the refund with the payment provider. Your access to the book is removed when the provider confirms the refund. Card refunds go back to your card.
+        <Todo>TODO(client): how M-Pesa refunds are paid back and how long they take.</Todo>
       </p>
     </LegalPage>
   );

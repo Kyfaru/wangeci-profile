@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,6 +11,7 @@ import { BOOK, BOOK_HREF, NAVBAR_LINKS } from "@/lib/content/landing";
 import { cn } from "@/lib/cn";
 import { useHydrated } from "@/lib/hooks/use-hydrated";
 import { useCartStore } from "@/lib/stores/cart-store";
+import { useSessionStore } from "@/lib/stores/session-store";
 
 /**
  * Fixed navbar. Transparent over the hero (`#hero`); once the hero has
@@ -18,12 +19,14 @@ import { useCartStore } from "@/lib/stores/cart-store";
  * as an outlined spill-fill button). Pages without a `#hero` stay glass.
  *
  * Book pages (`/store/*`) and `/cart` get the full-width variant instead of
- * the floating pill: a search input plus a cart icon (with item count) at the
- * far right, and no Get My Book CTA.
+ * the floating pill, without the Get My Book CTA. The cart icon (with item
+ * count) and the account icon are on every page. The CTA is also hidden on `/checkout*`.
  */
 export function Navbar() {
   const pathname = usePathname();
   const full = pathname.startsWith("/store/") || pathname === "/cart";
+  const hideCta = pathname.startsWith("/checkout");
+  const showBook = !full && !hideCta;
   const wide = pathname === "/"; // only the landing page gets the full-width mobile menu
   const hasHero = pathname === "/" || pathname.startsWith("/store/");
   // Path whose hero has scrolled away. Keyed by path because this navbar persists across
@@ -39,6 +42,10 @@ export function Navbar() {
     setOpen(false);
   }
   const closeMenu = () => setOpen(false);
+  const navRef = useRef<HTMLElement>(null);
+  const burgerRef = useRef<HTMLButtonElement>(null);
+  const authed = useSessionStore((s) => s.status === "authed");
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
   const solid = !hasHero || pastHero;
   const hydrated = useHydrated();
   const cartCount = useCartStore((s) => s.items.reduce((n, i) => n + i.qty, 0));
@@ -54,6 +61,28 @@ export function Navbar() {
     io.observe(hero);
     return () => io.disconnect();
   }, [hasHero, pathname]);
+
+  // Open mobile menu: Escape closes it (focus back on the hamburger), a click outside closes it, and the page behind does not scroll.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      burgerRef.current?.focus();
+    };
+    const onPointer = (e: PointerEvent) => {
+      if (!navRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open]);
 
   const linkClass =
     "text-xl font-light tracking-[0.03em] transition-opacity hover:opacity-70";
@@ -73,19 +102,25 @@ export function Navbar() {
     </Link>
   );
 
-  // Far right of every page: signed-out visitors land on sign-in; signed-in ones are sent on to the dashboard by that page.
+  // Far right of every page. The session hint is client-only (empty on first paint), so signed-in visitors briefly see "Sign in".
   const login = (
-    <Link href="/sign-in" aria-label="Sign in" className="grid size-11 place-items-center transition-opacity hover:opacity-70">
+    <Link
+      href={authed ? "/dashboard" : "/sign-in"}
+      aria-label={authed ? "Dashboard" : "Sign in"}
+      data-umami-event={authed ? "dashboard" : "sign-in"}
+      className="grid size-11 place-items-center transition-opacity hover:opacity-70"
+    >
       <MaskIcon name="lucide--user" size={30} />
     </Link>
   );
 
   return (
-    <header className={cn("fixed inset-x-0 top-0 z-50", !full && "px-4 pt-4 md:pt-6")}>
+    <header className={cn("pointer-events-none fixed inset-x-0 top-0 z-50", !full && "px-4 pt-4 md:pt-6")}>
       <nav
+        ref={navRef}
         aria-label="Main"
         className={cn(
-          "relative flex items-center justify-between transition-[background-color,box-shadow,color,border-color,padding] duration-500",
+          "pointer-events-auto relative flex items-center justify-between transition-[background-color,box-shadow,color,border-color,padding] duration-500",
           full
             ? cn(
                 "px-6 md:gap-8 md:px-[6vw]",
@@ -104,40 +139,16 @@ export function Navbar() {
         <ul className="hidden items-center gap-x-8 md:flex lg:gap-x-10">
           {NAVBAR_LINKS.map((l) => (
             <li key={l.href}>
-              <Link href={l.href} className={linkClass}>
+              <Link href={l.href} aria-current={isActive(l.href) ? "page" : undefined} className={linkClass}>
                 {l.label}
               </Link>
             </li>
           ))}
         </ul>
 
-        {full ? (
-          <div className="ml-auto hidden items-center gap-8 md:flex">
-            {/* ponytail: visual only; wire to /api/search once there is a results page. Hidden below lg: it doesn't fit beside the links. */}
-            <div role="search" className="relative hidden w-[min(420px,30vw)] lg:block">
-              <input
-                type="search"
-                aria-label="Search"
-                placeholder="Search for anything..."
-                className={cn(
-                  "h-[50px] w-full rounded-[45px] border-2 bg-transparent pl-7 pr-14 text-[15px] transition-colors duration-500 focus:border-gold focus:ring-0",
-                  solid
-                    ? "border-navy/40 text-navy placeholder:text-navy/50"
-                    : "border-white text-white placeholder:text-white/65",
-                )}
-              />
-              <MaskIcon
-                name="bitcoin-icons--search-filled"
-                size={37}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gold"
-              />
-            </div>
-            {cart}
-            {login}
-          </div>
-        ) : (
-          <div className="hidden items-center gap-2 md:flex">
-            {solid ? (
+        <div className="ml-auto hidden items-center gap-2 md:flex lg:gap-4">
+          {showBook &&
+            (solid ? (
               <FillButton href={BOOK_HREF} className="py-2 text-lg">
                 Get My Book
               </FillButton>
@@ -148,22 +159,25 @@ export function Navbar() {
               >
                 Get My Book <MaskIcon name="solar--arrow-right-up-line-duotone" className="text-gold" />
               </Link>
-            )}
-            {login}
-          </div>
-        )}
+            ))}
+          {cart}
+          {login}
+        </div>
 
         {/* Mobile */}
-        <span className="text-lg font-medium md:hidden">Wangeci</span>
+        <Link href="/" className="flex min-h-11 items-center text-lg font-medium md:hidden">
+          Wangeci
+        </Link>
         <div className="flex items-center gap-1 md:hidden">
-          {full && cart}
+          {cart}
           {login}
           <button
+            ref={burgerRef}
             type="button"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="grid size-10 place-items-center"
+            className="grid size-11 place-items-center"
           >
             <span className="flex w-6 flex-col gap-1.5">
               <span className={cn("h-0.5 bg-current transition-transform", open && "translate-y-2 rotate-45")} />
@@ -193,19 +207,19 @@ export function Navbar() {
               <div
                 className={cn(
                   "grid gap-x-3 gap-y-3",
-                  !full && (wide ? "min-[390px]:grid-cols-2" : "min-[390px]:grid-cols-[auto_auto]"),
+                  showBook && (wide ? "min-[390px]:grid-cols-2" : "min-[390px]:grid-cols-[auto_auto]"),
                 )}
               >
                 <ul className="flex flex-col gap-3">
                   {NAVBAR_LINKS.map((l) => (
                     <li key={l.href}>
-                      <Link href={l.href} onClick={closeMenu} className={cn("font-light", wide ? "text-xl" : "text-lg")}>
+                      <Link href={l.href} onClick={closeMenu} aria-current={isActive(l.href) ? "page" : undefined} className={cn("font-light", wide ? "text-xl" : "text-lg")}>
                         {l.label}
                       </Link>
                     </li>
                   ))}
                 </ul>
-                {!full && (
+                {showBook && (
                   <div className="flex flex-col items-center gap-3">
                     <Link
                       href={BOOK_HREF}

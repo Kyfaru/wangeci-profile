@@ -4,6 +4,12 @@
  * real content for it. Swap the values here; components don't change.
  */
 
+import { SITE } from "@/lib/site";
+
+/** Placeholder copy the client has not confirmed: shown while building, never in production. */
+const draft = (s: string) => (SITE.isProduction ? "" : s);
+const draftYear = (n: number) => (SITE.isProduction ? null : n);
+
 /** `live: false` links stay hidden until their page exists (Phase 2 flips them). */
 const ALL_NAV_LINKS = [
   { label: "About Me", href: "/about", live: true },
@@ -19,12 +25,12 @@ export const NAVBAR_LINKS = [{ label: "Home", href: "/" }, ...NAV_LINKS] as cons
 
 export const BOOK_HREF = "/store/from-pieces-to-power";
 
-/** Hero: rotates in this order. `year` = year she started that role. */
+/** Hero: rotates in this order. `year` = year she started that role (null = not shown). */
 export const HERO_ROLES = [
-  { label: "Entrepreneur", title: "an entrepreneur", year: 2012, color: "#5fd39a" }, // TODO(client): confirm year
-  { label: "Mother", title: "a mother", year: 2008, color: "#c08bff" }, // TODO(client): confirm year
-  { label: "Wife", title: "a wife", year: 2005, color: "#ff7a9c" }, // TODO(client): confirm year
-  { label: "Journalist", title: "a journalist", year: 2010, color: "#7cc4ff" }, // TODO(client): confirm year
+  { label: "Entrepreneur", title: "an entrepreneur", year: draftYear(2012), color: "#5fd39a" }, // TODO(client): confirm year
+  { label: "Mother", title: "a mother", year: draftYear(2008), color: "#c08bff" }, // TODO(client): confirm year
+  { label: "Wife", title: "a wife", year: draftYear(2005), color: "#ff7a9c" }, // TODO(client): confirm year
+  { label: "Journalist", title: "a journalist", year: draftYear(2010), color: "#7cc4ff" }, // TODO(client): confirm year
   { label: "Author", title: "an author", year: 2026, color: "#f2b90d" }, // year from Figma
 ] as const;
 
@@ -40,9 +46,7 @@ export const ABOUT_PANELS = [
     tint: "#0b7a4b", // green — the Fechi storefront
     image: "/images/fechi-organics-shopfront.jpg",
     position: "50% 40%",
-    // Copy from Figma.
-    blurb:
-      "Wangeci Kariuki, a former Kameme TV journalist, grew up in a dysfunctional family—a background that deeply impacted her upbringing. Despite the challenges, she held on to a dream: to become a journalist and create a better life for herself.",
+    blurb: draft("TODO(client): her story as an entrepreneur."),
   },
   {
     label: "Wife",
@@ -50,7 +54,7 @@ export const ABOUT_PANELS = [
     image: "/images/wangeci-wife.jpg",
     position: "50% 30%",
     blurb:
-      "Marriage taught her that love is a daily decision. Together they are building a home rooted in faith, honesty and laughter.", // TODO(client)
+      draft("Marriage taught her that love is a daily decision. Together they are building a home rooted in faith, honesty and laughter."), // TODO(client)
   },
   {
     label: "Journalist",
@@ -58,7 +62,7 @@ export const ABOUT_PANELS = [
     image: "/images/wangeci-journalist.png",
     position: "50% 20%",
     blurb:
-      "Years in the newsroom taught her to listen closely and tell the truth plainly—skills that still shape every story she tells.", // TODO(client)
+      draft("Years in the newsroom taught her to listen closely and tell the truth plainly—skills that still shape every story she tells."), // TODO(client)
   },
   {
     label: "Mother",
@@ -66,7 +70,7 @@ export const ABOUT_PANELS = [
     image: "/images/wangeci-mother.jpg",
     position: "50% 30%",
     blurb:
-      "Motherhood is her greatest teacher and her deepest reason to keep going—everything she builds is for the children watching.", // TODO(client)
+      draft("Motherhood is her greatest teacher and her deepest reason to keep going—everything she builds is for the children watching."), // TODO(client)
   },
   {
     label: "Author",
@@ -74,7 +78,7 @@ export const ABOUT_PANELS = [
     image: "/images/wangeci-author.jpg",
     position: "50% 25%",
     blurb:
-      "Her memoir, From Pieces To Power, turns pain, loss and survival into a roadmap for anyone rebuilding from scratch.", // TODO(client)
+      draft("Her memoir, From Pieces To Power, turns pain, loss and survival into a roadmap for anyone rebuilding from scratch."), // TODO(client)
   },
 ] as const;
 
@@ -93,14 +97,14 @@ export const BUSINESSES = [
     image: "/images/blissful-oasis-flyer.jpg",
     alt: "Blissful Oasis peaceful family retreat flyer",
     description:
-      "A peaceful family retreat with a swimming pool, bonfire nights, outdoor movies and full-board meals—a place for families to slow down, reconnect and rest.", // TODO(client)
+      draft("A peaceful family retreat with a swimming pool, bonfire nights, outdoor movies and full-board meals—a place for families to slow down, reconnect and rest."), // TODO(client)
   },
   {
     name: "Home Care Solutions",
     image: "/images/home-care-solutions-logo.jpg",
     alt: "Home Care Solutions logo",
     description:
-      "Dependable, compassionate home-care services that give families peace of mind, delivered by trained and caring professionals.", // TODO(client)
+      draft("Dependable, compassionate home-care services that give families peace of mind, delivered by trained and caring professionals."), // TODO(client)
   },
 ] as const;
 
@@ -109,10 +113,8 @@ export const BOOK = {
   titleBottom: "To",
   accent: "Power",
   blurb:
-    "She walked barefoot to school on dusty village roads, raised by siblings barely older than herself. Her mother-an invisible hero-was always in another town, selling maize to keep her seven children alive. When her mother died, she lost more than a parent - she lost her home, her place in the world.",
+    "She walked barefoot to school on dusty village roads, raised by siblings barely older than herself. Her mother, an invisible hero, was always in another town, selling maize to keep her seven children alive. When her mother died, she lost more than a parent - she lost her home, her place in the world.",
   cover: "/images/from-pieces-to-power-front-cover.png",
-  price: "KES 2000",
-  oldPrice: "KES 3000",
   cta: "Get Your Copy Now",
 } as const;
 
@@ -122,7 +124,7 @@ export const TESTIMONIALS: readonly { quote: string; author: string; role: strin
 export const FOOTER = {
   blurb:
     "Author, entrepreneur and former journalist Wangeci Kariuki—turning pieces into power, one story at a time.",
-  explore: [{ label: "Home", href: "/" }, ...NAV_LINKS],
+  explore: [{ label: "Home", href: "/" }, ...NAV_LINKS, { label: "Cart", href: "/cart" }, { label: "Sign in", href: "/sign-in" }],
   ventures: BUSINESSES.map((b) => b.name),
   // Contact comes from SITE.contact (null = hidden in production).
   // TODO(client): real profile URLs. href null = hidden in production.

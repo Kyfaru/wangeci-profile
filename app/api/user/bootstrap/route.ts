@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSession } from "@/lib/server/session";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ const maskEmail = (e: string) => e.replace(/^(.).*(@.*)$/, "$1***$2");
 const maskPhone = (p: string | null | undefined) => (p ? `${p.slice(0, 4)}***${p.slice(-2)}` : null);
 
 /** GET /api/user/bootstrap: display-only profile data for the browser cache. No tokens, no entitlements. */
-export async function GET() {
+async function handleGET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
   const { user } = session;
@@ -24,3 +25,5 @@ export async function GET() {
     { headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export const GET = api("user.bootstrap.get", handleGET);

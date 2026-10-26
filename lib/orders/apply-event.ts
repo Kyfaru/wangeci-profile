@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
 
 import { markOrderPaid } from "@/lib/orders/grant";
 import { afterOrderPaid } from "@/lib/orders/post-paid";
@@ -8,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { findOwnerId, recordAudit } from "@/lib/server/audit";
 import { notify } from "@/lib/server/notifier";
 import { notifyAdmins } from "@/lib/server/notify-admins";
+import { AppError, logError } from "@/lib/trace";
 
 export type ApplyResult =
   | "granted" // the order was moved to PAID and the books granted now
@@ -15,7 +15,9 @@ export type ApplyResult =
   | "mismatch" // amount or currency differs from the order: nothing granted
   | "failed" // the payment failed; order marked FAILED
   | "refunded" // refund completed; access removed
-  | "refund_failed";
+  | "refund_failed"
+  | "dispute_opened" // order flagged, admins alerted; access untouched
+  | "dispute_resolved";
 
 /**
  * Applies ONE normalised provider event. Webhooks, the checkout status fallback and the cron sweep all
@@ -33,6 +35,9 @@ export async function applyProviderEvent(event: ProviderEvent): Promise<ApplyRes
       return onRefundProcessed(event);
     case "refund.failed":
       return onRefundFailed(event);
+    case "dispute.opened":
+    case "dispute.resolved":
+      return onDispute(event);
     default:
       return "noop";
   }
@@ -41,7 +46,7 @@ export async function applyProviderEvent(event: ProviderEvent): Promise<ApplyRes
 async function onPaymentSucceeded(event: Extract<ProviderEvent, { type: "payment.succeeded" }>): Promise<ApplyResult> {
   const order = await prisma.order.findUnique({ where: { providerReference: event.reference }, include: { items: { include: { edition: { include: { work: true } } } } } });
   if (!order) {
-    console.error("[orders] success event for an unknown reference", event.reference);
+    logError("orders.unknown-reference", new AppError("ORDER_NOT_FOUND", "payment event for an unknown reference", 404), { reference: event.reference });
     return "noop";
   }
   if (order.provider !== event.provider) return "noop";
@@ -57,7 +62,7 @@ async function onPaymentSucceeded(event: Extract<ProviderEvent, { type: "payment
   // 2. M-Pesa callbacks are unsigned, so confirm with Safaricom directly before trusting them.
   if (event.provider === "MPESA") {
     const confirmed = await getProvider("MPESA").verify(event.reference).catch((error) => {
-      console.error("[orders] M-Pesa confirmation failed", error);
+      logError("orders.mpesa-confirm", error, { orderId: order.id });
       throw error; // cannot confirm right now: let the caller retry later
     });
     if (confirmed.state !== "success") return "noop";
@@ -68,16 +73,15 @@ async function onPaymentSucceeded(event: Extract<ProviderEvent, { type: "payment
   if (!granted) return "noop";
 
   // 4. After the commit: invoice, email, SMS and admin alerts. Failures here must never undo or fail the payment.
-  await afterOrderPaid(order.id).catch((error) => console.error("[orders] post-payment steps failed", error));
+  await afterOrderPaid(order.id).catch((error) => logError("orders.post-paid", error, { orderId: order.id }));
   return "granted";
 }
 
 async function raiseMismatch(orderId: string, expected: string, currency: string, event: Extract<ProviderEvent, { type: "payment.succeeded" }>) {
   const message = `Payment amount mismatch on order ${orderId}: expected ${currency} ${expected}, provider reported ${event.currency} ${event.amount} (${event.provider} ${event.reference}). No access granted.`;
-  console.error("[orders]", message);
-  Sentry.captureMessage(message, "error");
-  await prisma.order.update({ where: { id: orderId }, data: { failureReason: "amount_mismatch" } }).catch(() => {});
-  await notifyAdmins({ type: "payment_mismatch", title: "Payment amount mismatch", body: message, link: `/admin/sales/${orderId}`, dedupeKey: `mismatch:${orderId}`, urgent: true }).catch((e) => console.error("[orders] admin alert failed", e));
+  logError("orders.amount-mismatch", new AppError("ORDER_AMOUNT_MISMATCH", message, 500), { orderId });
+  await prisma.order.update({ where: { id: orderId }, data: { failureReason: "amount_mismatch" } }).catch((e) => logError("orders.mismatch-flag", e, { orderId }));
+  await notifyAdmins({ type: "payment_mismatch", title: "Payment amount mismatch", body: message, link: `/admin/sales/${orderId}`, dedupeKey: `mismatch:${orderId}`, urgent: true }).catch((e) => logError("orders.admin-alert", e, { orderId }));
 }
 
 async function onPaymentFailed(event: Extract<ProviderEvent, { type: "payment.failed" }>): Promise<ApplyResult> {
@@ -114,7 +118,7 @@ async function onRefundProcessed(event: Extract<ProviderEvent, { type: "refund.p
   if (!done) return "noop";
 
   const titles = order.items.map((i) => i.edition.title ?? i.edition.work.title);
-  await Promise.allSettled([notify(order.userId, { type: "refund_completed", orderId: order.id, titles }, ["in_app"])]);
+  await Promise.allSettled([notify(order.userId, { type: "refund_completed", orderId: order.id, titles })]);
   return "refunded";
 }
 
@@ -126,8 +130,42 @@ async function onRefundFailed(event: Extract<ProviderEvent, { type: "refund.fail
     await tx.order.update({ where: { id: order.id }, data: { refundRequestedAt: null, refundRequestedById: null } });
     if (actor) await recordAudit({ adminId: actor, action: "refund.failed", targetType: "order", targetId: order.id, meta: { reference: event.reference } }, tx);
   });
-  await notifyAdmins({ type: "refund_failed", title: "Refund failed", body: `The provider could not refund order ${order.id}. The order is unchanged.`, link: `/admin/sales/${order.id}`, dedupeKey: `refund-failed:${order.id}`, urgent: true }).catch(() => {});
+  await notifyAdmins({ type: "refund_failed", title: "Refund failed", body: `The provider could not refund order ${order.id}. The order is unchanged.`, link: `/admin/sales/${order.id}`, dedupeKey: `refund-failed:${order.id}`, urgent: true }).catch((e) => logError("orders.admin-alert", e, { orderId: order.id }));
   return "refund_failed";
+}
+
+// A chargeback is for a person to decide on, so we flag and alert but never revoke access ourselves.
+// failureReason doubles as the flag (no schema change); the conditional update makes the audit row once-only.
+const DISPUTE_OPEN = "dispute_open";
+
+async function onDispute(event: Extract<ProviderEvent, { type: "dispute.opened" | "dispute.resolved" }>): Promise<ApplyResult> {
+  const order = await prisma.order.findFirst({ where: { providerReference: event.reference, provider: event.provider, status: "PAID" }, select: { id: true } });
+  if (!order) {
+    logError("orders.dispute-unknown-reference", new AppError("ORDER_NOT_FOUND", "dispute event for an unknown or unpaid reference", 404), { reference: event.reference });
+    return "noop";
+  }
+  const opened = event.type === "dispute.opened";
+  const flag = opened ? DISPUTE_OPEN : `dispute_resolved:${event.resolution ?? "unknown"}`.slice(0, 200);
+  const actor = await findOwnerId();
+
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.order.updateMany({ where: { id: order.id, OR: [{ failureReason: null }, { failureReason: { not: flag } }] }, data: { failureReason: flag } });
+    if (count > 0 && actor) await recordAudit({ adminId: actor, action: opened ? "dispute.opened" : "dispute.resolved", targetType: "order", targetId: order.id, meta: { reference: event.reference, ...(opened ? {} : { resolution: event.resolution ?? null }) } }, tx);
+  });
+
+  // Outside the transaction and not swallowed: if the alert fails the webhook is retried, and dedupeKey
+  // keeps the retry from creating a second one.
+  await notifyAdmins({
+    type: opened ? "payment_dispute" : "payment_dispute_resolved",
+    title: opened ? "Card dispute opened" : "Card dispute resolved",
+    body: opened
+      ? `A customer disputed the card payment for order ${order.id}. Access was NOT removed: review it in the Paystack dashboard.`
+      : `The card dispute for order ${order.id} was resolved (${event.resolution ?? "no resolution given"}). Access is unchanged.`,
+    link: `/admin/sales/${order.id}`,
+    dedupeKey: `${opened ? "dispute" : "dispute-resolved"}:${order.id}`,
+    urgent: opened,
+  });
+  return opened ? "dispute_opened" : "dispute_resolved";
 }
 
 /**

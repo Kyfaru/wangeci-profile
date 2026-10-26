@@ -1,30 +1,44 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logError } from "@/lib/trace";
 import { headers } from "next/headers";
 import { z } from "zod";
 
 import {
   AdminError,
   ASSIGNABLE_ROLES,
+  COMMENT_STATUSES,
   createCoupon,
   grantComplimentaryAccess,
+  moderateComment,
   recordManualRefund,
+  replyToComment,
   requestRefund,
   revokeComplimentaryAccess,
   setBan,
+  setAdminEmailAlerts,
   setCouponActive,
+  setFeedbackStatus,
   setEditionActive,
   setRole,
   type Actor,
 } from "@/lib/admin/actions";
+import { attachChapterAudio, createBook, deleteChapter, importManuscript, moveChapter, saveChapter } from "@/lib/admin/content";
+import { hasFreshStepUp, STEP_UP_ADMIN_MS } from "@/lib/auth/guards";
 import type { Action } from "@/lib/permissions";
+import { clientIp } from "@/lib/rate-limit";
 import { checkAdmin } from "@/lib/server/session";
 
 export interface ActionResult {
   ok: boolean;
   message: string;
+  /** True when the action was refused only because a fresh email code is needed (show the code prompt). */
+  stepUp?: boolean;
 }
+
+/** Actions that move money or change who may do what need an email code entered this recently. */
+const STEP_UP_ACTIONS: Action[] = ["order.refund", "roles.manage"];
 
 /**
  * Every admin server action starts here: the admin gate runs AGAIN on the server (a hidden button is
@@ -33,7 +47,10 @@ export interface ActionResult {
 async function run(permission: Action, change: (actor: Actor) => Promise<string>): Promise<ActionResult> {
   const check = await checkAdmin(permission);
   if (!check.ok) return { ok: false, message: "You are not allowed to do that." };
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  if (STEP_UP_ACTIONS.includes(permission) && !(await hasFreshStepUp(check.user.id, STEP_UP_ADMIN_MS))) {
+    return { ok: false, stepUp: true, message: "Please confirm it is you: request and enter a fresh email code, then try again." };
+  }
+  const ip = clientIp(await headers());
   try {
     const message = await change({ id: check.user.id, ip });
     revalidatePath("/admin", "layout");
@@ -41,7 +58,7 @@ async function run(permission: Action, change: (actor: Actor) => Promise<string>
   } catch (error) {
     if (error instanceof AdminError) return { ok: false, message: error.message };
     if (error instanceof z.ZodError) return { ok: false, message: error.issues[0]?.message ?? "Please check the form." };
-    console.error("[admin action] failed", error);
+    logError(`admin.${permission}`, error, { adminId: check.user.id });
     return { ok: false, message: "Something went wrong. Nothing was changed." };
   }
 }
@@ -122,5 +139,102 @@ export async function editionActiveAction(_prev: ActionResult | null, form: Form
     const active = text(form, "active") === "true";
     await setEditionActive({ editionId: text(form, "editionId"), active, actor, reason: text(form, "reason") });
     return active ? "Edition published." : "Edition retired. Owners keep their access.";
+  });
+}
+
+export async function moderateCommentAction(_prev: ActionResult | null, form: FormData) {
+  return run("comments.moderate", async (actor) => {
+    const status = z.enum(COMMENT_STATUSES).parse(text(form, "status"));
+    await moderateComment({ commentId: text(form, "commentId"), status, actor, reason: text(form, "reason") });
+    return "Comment updated.";
+  });
+}
+
+export async function replyToCommentAction(_prev: ActionResult | null, form: FormData) {
+  return run("comments.moderate", async (actor) => {
+    await replyToComment({ commentId: text(form, "commentId"), body: text(form, "body"), actor });
+    return "Reply posted.";
+  });
+}
+
+export async function feedbackStatusAction(_prev: ActionResult | null, form: FormData) {
+  return run("comments.moderate", async (actor) => {
+    const status = z.enum(["READ", "ACTIONED"]).parse(text(form, "status"));
+    await setFeedbackStatus({ feedbackId: text(form, "feedbackId"), status, actor });
+    return "Feedback updated.";
+  });
+}
+
+export async function emailAlertsAction(_prev: ActionResult | null, form: FormData) {
+  return run("messages.reply", async (actor) => {
+    await setAdminEmailAlerts({ actor, enabled: text(form, "enabled") === "true" });
+    return "Saved.";
+  });
+}
+
+
+// ---------------------------------------------------------------------------
+// Book authoring (content.manage): drafts, chapters, audio, manuscript import.
+// ---------------------------------------------------------------------------
+
+const optional = (form: FormData, key: string) => text(form, key).trim() || undefined;
+
+export async function createBookAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await createBook({
+      actor,
+      title: text(form, "title"),
+      slug: text(form, "slug"),
+      author: text(form, "author"),
+      description: optional(form, "description"),
+      format: text(form, "format"),
+      price: Number(text(form, "price")),
+      currency: text(form, "currency") || "KES",
+      narrator: optional(form, "narrator"),
+    });
+    return "Book created as a draft. Add chapters, then publish it.";
+  });
+}
+
+export async function saveChapterAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await saveChapter({
+      actor,
+      editionId: text(form, "editionId"),
+      chapterId: optional(form, "chapterId"),
+      title: text(form, "title"),
+      body: text(form, "body"),
+      isFreePreview: text(form, "isFreePreview") === "on",
+      reason: optional(form, "reason"),
+    });
+    return "Chapter saved.";
+  });
+}
+
+export async function moveChapterAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await moveChapter({ actor, chapterId: text(form, "chapterId"), dir: text(form, "dir") === "up" ? "up" : "down", reason: optional(form, "reason") });
+    return "Chapter moved.";
+  });
+}
+
+export async function deleteChapterAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await deleteChapter({ actor, chapterId: text(form, "chapterId"), reason: optional(form, "reason") });
+    return "Chapter deleted.";
+  });
+}
+
+export async function attachChapterAudioAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    await attachChapterAudio({ actor, chapterId: text(form, "chapterId"), key: text(form, "key"), durationSeconds: Math.round(Number(text(form, "durationSeconds"))), reason: optional(form, "reason") });
+    return "Audio attached.";
+  });
+}
+
+export async function importManuscriptAction(_prev: ActionResult | null, form: FormData) {
+  return run("content.manage", async (actor) => {
+    const { added } = await importManuscript({ actor, editionId: text(form, "editionId"), manuscript: text(form, "manuscript"), reason: optional(form, "reason") });
+    return `${added} chapters added.`;
   });
 }

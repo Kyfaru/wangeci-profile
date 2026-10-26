@@ -27,6 +27,9 @@ Staging is Vercel (branch `stage`). Production is a VPS with Coolify (branch `ma
 ## 4. Security switches
 - [ ] **Content-Security-Policy**: currently report-only (`proxy.ts`). On staging open every page (home, store, a book, cart, checkout with the card popup and Turnstile, sign-in, a dashboard, reader, listening page, admin) with the browser console open. When no violation is reported, change the header names from `Content-Security-Policy-Report-Only` to `Content-Security-Policy` in `proxy.ts`. Keep `'strict-dynamic'` and the nonce.
 - [ ] `NEXT_PUBLIC_SITE_ENV=production` only on the production host (it removes the staging `noindex`).
+- [ ] `NEXT_PUBLIC_SITE_ENV=staging` **must** be set explicitly on staging. Semantics (`isRelaxed()` in `lib/site.ts`): with `NODE_ENV=production`, anything other than the exact value `staging` (including unset or a typo) is treated as the real site: boot requires Upstash, QStash, Daraja, Turnstile and `CRON_SECRET`, rate limiting and Turnstile are enforced. Only `staging` (or `NODE_ENV` development/test) may run without them. Because it is a `NEXT_PUBLIC_` value it is baked in at build time: set it before the build.
+- [ ] Staging uses its own Neon branch or database, never the production `DATABASE_URL`/`DIRECT_URL`. Staging runs test payment keys and test users; sharing the database would mix them with real customers and orders.
+- [ ] Vercel Hobby is for non-commercial, personal use only (Vercel's fair use guidelines). This site sells books, so staging on Vercel needs the Pro plan; otherwise stage on the VPS (a second Coolify app).
 - [ ] Cloudflare in front of the VPS: proxy on, "Always HTTPS", a rate-limit rule on `/api/auth/*` and `/api/checkout`, bot fight mode on. Close all ports except 80, 443 and SSH; SSH keys only.
 - [ ] No placeholder content: search the site for `TODO(client)` and the dev-only Figma stats; `docs/reality-report.md` lists them. Terms, Privacy, Refunds and Cookies pages are drafts until a lawyer approves them.
 
@@ -40,7 +43,7 @@ Staging is Vercel (branch `stage`). Production is a VPS with Coolify (branch `ma
 
 ## 6. Backups and recovery
 - [ ] Postgres: daily automated backups with 14 days retention, and a restore tested once into a scratch database. Take a manual backup immediately before each production migration.
-- [ ] R2: versioning on, so an overwritten audio file can be recovered.
+- [ ] R2 has **no S3 object versioning** (`PutBucketVersioning` is listed as not implemented in Cloudflare's S3 API compatibility page), so an overwritten or deleted file cannot be rolled back there. Instead: keep the original masters (audio, PDFs, EPUBs) outside R2 (your drive or a second bucket/provider), publish new editions under new keys instead of overwriting, and never give the app's R2 key delete rights on the protected bucket beyond what the code needs.
 - [ ] Keep the previous Coolify deployment so a rollback is one click. Migrations here only add; if one must be undone, restore the backup, do not hand-edit tables.
 
 ## 7. After launch

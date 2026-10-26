@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 
 import { env } from "@/lib/env";
-import { ProviderError, type PaymentProvider, type ProviderEvent, type VerifyResult } from "@/lib/payments/types";
+import { providerError, type PaymentProvider, type ProviderEvent, type VerifyResult } from "@/lib/payments/types";
+import { AppError } from "@/lib/trace";
 
 // Verified against https://paystack.com/docs/payments/webhooks/ , /docs/api/transaction/ and
 // /docs/api/refund/ on 2026-10-06:
@@ -10,9 +11,16 @@ import { ProviderError, type PaymentProvider, type ProviderEvent, type VerifyRes
 //    failed or abandoned payments are discovered with GET /transaction/verify/:reference)
 //  - amount is in the smallest currency unit (KES cents); verify returns data.status "success" | "failed" | "abandoned"
 //  - POST /refund { transaction, amount?, merchant_note }; statuses pending, processing, processed, needs-attention
-// UNVERIFIED: the exact field that carries the original transaction reference in refund.* payloads
-// (Paystack publishes no sample). parseEvent accepts the likely names, and the match is only
-// honoured for orders where we ourselves asked for a refund.
+//  - also verified 2026-10-15 on the same webhook page: refund.pending and refund.processing exist (state
+//    only, deliberately ignored: only refund.processed / refund.failed change an order), and the dispute
+//    events charge.dispute.create | charge.dispute.remind | charge.dispute.resolve
+//  - API reference: the dispute object carries the disputed transaction at data.transaction.reference
+//    (resolution "merchant-accepted" | "declined"); the Create Refund response nests transaction.reference
+//    but Fetch/List return transaction as a numeric id
+// UNVERIFIED: the webhook payload for refund.* and charge.dispute.* has no published sample. We assume
+// it mirrors the API object, so parseEvent accepts the likely reference fields. A match is only honoured
+// for refunds we asked for, and a dispute only flags a PAID order we know (it never revokes access).
+// charge.dispute.remind is ignored: the order is already flagged by charge.dispute.create.
 const BASE = "https://api.paystack.co";
 
 const toMinor = (major: number) => Math.round(major * 100);
@@ -25,7 +33,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     signal: AbortSignal.timeout(15_000),
   });
   const json = (await res.json().catch(() => null)) as { status?: boolean; message?: string; data?: T } | null;
-  if (!res.ok || !json?.status) throw new ProviderError(`Paystack ${path} failed: ${json?.message ?? res.status}`);
+  if (!res.ok || !json?.status) {
+    // A 4xx with Paystack's own JSON is a definite "no"; a 5xx or an unreadable body leaves the outcome unknown.
+    const refused = res.status < 500 && json?.status === false;
+    throw providerError(`Paystack ${path} failed: ${json?.message ?? res.status}`, refused ? "PAYMENT_PROVIDER_REFUSED" : undefined);
+  }
   return json.data as T;
 }
 
@@ -74,6 +86,14 @@ export const paystack: PaymentProvider = {
         if (!ref) return { type: "ignored" };
         return { type: p.event === "refund.processed" ? "refund.processed" : "refund.failed", provider: "PAYSTACK", reference: ref };
       }
+      case "charge.dispute.create":
+      case "charge.dispute.resolve": {
+        const nested = data.transaction as { reference?: unknown } | undefined;
+        const ref = [nested?.reference, data.transaction_reference].find((v): v is string => typeof v === "string");
+        if (!ref) return { type: "ignored" };
+        if (p.event === "charge.dispute.create") return { type: "dispute.opened", provider: "PAYSTACK", reference: ref };
+        return { type: "dispute.resolved", provider: "PAYSTACK", reference: ref, resolution: typeof data.resolution === "string" ? data.resolution : undefined };
+      }
       default:
         return { type: "ignored" };
     }
@@ -87,7 +107,13 @@ export const paystack: PaymentProvider = {
   },
 
   async refund({ reference, amount, reason }) {
-    await call("/refund", { method: "POST", body: JSON.stringify({ transaction: reference, amount: toMinor(amount), merchant_note: reason.slice(0, 200) }) });
-    return { ok: true };
+    try {
+      await call("/refund", { method: "POST", body: JSON.stringify({ transaction: reference, amount: toMinor(amount), merchant_note: reason.slice(0, 200) }) });
+      return { ok: true };
+    } catch (error) {
+      // Only a definite refusal is "ok: false". A timeout or 5xx may still have refunded: those are rethrown.
+      if (error instanceof AppError && error.code === "PAYMENT_PROVIDER_REFUSED") return { ok: false };
+      throw error;
+    }
   },
 };
