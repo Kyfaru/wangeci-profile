@@ -41,7 +41,7 @@
     "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "resend": "^6.24.0",
+    "resend": "^6.34.1",
     "server-only": "^0.0.1",
     "svix": "^2.1.0",
     "zod": "^4.4.3",
@@ -49,7 +49,7 @@
   },
   "devDependencies": {
     "@iconify-json/logos": "^1.2.13",
-    "@iconify-json/lucide": "^1.2.126",
+    "@iconify-json/lucide": "^1.2.147",
     "@iconify-json/tabler": "^1.2.38",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/forms": "^0.5.11",
