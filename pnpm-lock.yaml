@@ -676,8 +676,8 @@ packages:
   '@iconify-json/logos@1.2.13':
     resolution: {integrity: sha512-Up54ZnIuiuBgGAsuzhR1nvKqwq8VE6YM3XLwVB6IgY+7NAasz6WKu9Ay5hGfAkfuOKowodfwDC8ozReEBYrWRg==}
 
-  '@iconify-json/lucide@1.2.147':
-    resolution: {integrity: sha512-7Qqa/joSBeUxihWsQJx5nKcqMWtV3YrH90Jldxcx4J9ciTLavRUlpexQwRTcx9dcb7CJpISfjZTj42zD/30sqA==}
+  '@iconify-json/lucide@1.2.126':
+    resolution: {integrity: sha512-Fl3OfR71yeWLrlTLp6C4W5W3rJJDWH9/e70mjtq9VAldYDxvHh149JMNPz7foTeLLTE2Paynnp2aYKVL9rgF5Q==}
 
   '@iconify-json/tabler@1.2.38':
     resolution: {integrity: sha512-9v6ooRU/bKOK/Whv4w2aiK5gBnfCV9Ei+uD1iDDeLu2b+EnF3G3ZKkRKWEOOLG8bJyfKn6XEia6gUQ9oO7cF+Q==}
@@ -3732,6 +3732,10 @@ packages:
     resolution: {integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==}
     engines: {node: '>=8.6'}
 
+  picomatch@4.0.5:
+    resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
+    engines: {node: '>=12'}
+
   picomatch@4.0.7:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
@@ -4995,7 +4999,7 @@ snapshots:
     dependencies:
       '@iconify/types': 2.0.0
 
-  '@iconify-json/lucide@1.2.147':
+  '@iconify-json/lucide@1.2.126':
     dependencies:
       '@iconify/types': 2.0.0
 
@@ -5476,10 +5480,10 @@ snapshots:
       '@rollup/pluginutils': 5.4.0(rollup@4.63.0)
       commondir: 1.0.1
       estree-walker: 2.0.2
-      fdir: 6.5.0(picomatch@4.0.7)
+      fdir: 6.5.0(picomatch@4.0.5)
       is-reference: 1.2.1
       magic-string: 0.30.21
-      picomatch: 4.0.7
+      picomatch: 4.0.5
     optionalDependencies:
       rollup: 4.63.0
 
@@ -5487,7 +5491,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
       estree-walker: 2.0.2
-      picomatch: 4.0.7
+      picomatch: 4.0.5
     optionalDependencies:
       rollup: 4.63.0
 
@@ -5712,6 +5716,11 @@ snapshots:
 
   '@sentry/node@10.71.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(supports-color@8.1.1)':
     dependencies:
+      '@sentry/conventions': 0.16.0
+      '@sentry/core': 10.71.0
+      '@sentry/opentelemetry': 10.71.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))
+      import-in-the-middle: 3.3.3
+    optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/instrumentation': 0.220.0(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
       '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
@@ -5734,12 +5743,12 @@ snapshots:
       '@sentry/conventions': 0.16.0
       '@sentry/core': 10.71.0
 
-  '@sentry/react@10.71.0(react@19.3.1)':
+  '@sentry/react@10.71.0(react@19.2.8)':
     dependencies:
       '@sentry/browser': 10.71.0
       '@sentry/conventions': 0.16.0
       '@sentry/core': 10.71.0
-      react: 19.3.1
+      react: 19.2.8
 
   '@sentry/replay-canvas@10.71.0':
     dependencies:
@@ -5775,10 +5784,14 @@ snapshots:
       - rollup
       - supports-color
 
-  '@smithy/core@3.36.2':
+  '@sentry/webpack-plugin@5.4.0(rollup@4.63.0)(supports-color@8.1.1)(webpack@5.109.2(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))':
     dependencies:
-      '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      '@sentry/bundler-plugins': 10.71.0(rollup@4.63.0)(supports-color@8.1.1)(webpack@5.109.2(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
+      webpack: 5.109.2(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)
+    transitivePeerDependencies:
+      - encoding
+      - rollup
+      - supports-color
 
   '@smithy/credential-provider-imds@4.5.2':
     dependencies:
@@ -7075,6 +7088,10 @@ snapshots:
     dependencies:
       reusify: 1.1.0
 
+  fdir@6.5.0(picomatch@4.0.5):
+    optionalDependencies:
+      picomatch: 4.0.5
+
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
@@ -7917,6 +7934,8 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@2.3.2: {}
+
+  picomatch@4.0.5: {}
 
   picomatch@4.0.7: {}
 
