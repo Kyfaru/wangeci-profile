@@ -39,7 +39,7 @@
     "preline": "^5.0.0",
     "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
-    "react": "19.3.1",
+    "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "^6.34.1",
     "server-only": "^0.0.1",
