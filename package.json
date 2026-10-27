@@ -39,17 +39,17 @@
     "preline": "^5.0.0",
     "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
-    "react": "19.2.8",
+    "react": "19.3.1",
     "react-dom": "19.2.8",
-    "resend": "^6.24.0",
+    "resend": "^6.34.1",
     "server-only": "^0.0.1",
-    "svix": "^2.1.0",
+    "svix": "^2.9.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@iconify-json/logos": "^1.2.13",
-    "@iconify-json/lucide": "^1.2.126",
+    "@iconify-json/lucide": "^1.2.147",
     "@iconify-json/tabler": "^1.2.38",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/forms": "^0.5.11",
@@ -64,7 +64,7 @@
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   },
   "packageManager": "pnpm@11.16.0"
 }
