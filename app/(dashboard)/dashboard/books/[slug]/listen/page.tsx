@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { ListenClient } from "@/components/audio/ListenClient";
 import { BreadcrumbBar } from "@/components/dashboard/BreadcrumbBar";
-import { getBookBySlug } from "@/lib/catalogue";
+import { getBookBySlug, getOwnedBook } from "@/lib/catalogue";
 import { prisma } from "@/lib/prisma";
 import { parseLocator } from "@/lib/reading/locator";
 import { requireUser } from "@/lib/server/session";
@@ -19,12 +19,10 @@ export async function generateMetadata({ params }: PageProps<"/dashboard/books/[
 export default async function ListenPage({ params }: PageProps<"/dashboard/books/[slug]/listen">) {
   const user = await requireUser();
   const { slug } = await params;
-  const book = await getBookBySlug(slug);
+  // Owners keep listening to an edition that was later retired, so the lookup is by ownership, not by isActive.
+  const book = await getOwnedBook(slug, user.id);
   const audio = book?.editions.find((e) => e.format === "audiobook");
   if (!book || !audio) notFound();
-
-  const entitled = await prisma.entitlement.findUnique({ where: { userId_editionId: { userId: user.id, editionId: audio.id } }, select: { id: true } });
-  if (!entitled) notFound();
 
   const [chapters, saved] = await Promise.all([
     prisma.chapter.findMany({ where: { editionId: audio.id, assetId: { not: null } }, orderBy: { idx: "asc" }, select: { idx: true, title: true, durationSeconds: true } }),

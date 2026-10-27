@@ -27,8 +27,8 @@ export function BookSection() {
             {BOOK.blurb}
           </p>
 
-          {/* Mobile: price stacked above the button, both centred. md+: button with the price beside it. */}
-          <div className="mt-10 flex flex-col-reverse items-center gap-y-5 md:flex-row md:flex-wrap md:gap-x-10 md:gap-y-6">
+          {/* No price here: prices live in the database and show on the store pages. */}
+          <div className="mt-10 flex justify-center md:justify-start">
             <Link
               href={BOOK_HREF}
               className="group inline-flex h-[55px] w-[319px] max-w-full items-center justify-center gap-3 rounded-[10px] bg-gold-bright text-[clamp(1.125rem,1.8vw,1.625rem)] font-medium text-black transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgb(253_193_5/0.35)]"
@@ -42,10 +42,6 @@ export function BookSection() {
                 className="transition-transform duration-300 group-hover:translate-x-1"
               />
             </Link>
-            <div className="text-center">
-              <p className="text-2xl text-[rgb(152_152_152/0.57)] line-through">{BOOK.oldPrice}</p>
-              <p className="text-4xl font-medium text-cream">{BOOK.price}</p>
-            </div>
           </div>
         </motion.div>
 

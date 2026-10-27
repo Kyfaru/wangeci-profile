@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   AnimatePresence,
   animate,
@@ -9,7 +10,7 @@ import {
   useMotionValue,
   useTransform,
 } from "motion/react";
-import { HERO_ROLES } from "@/lib/content/landing";
+import { BOOK_HREF, HERO_ROLES } from "@/lib/content/landing";
 import { cn } from "@/lib/cn";
 import { SITE } from "@/lib/site";
 
@@ -162,6 +163,25 @@ export function Hero() {
             </AnimatePresence>
           </span>
         </motion.p>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.7 }}
+          className="mt-6 flex flex-wrap justify-center gap-3 wide:justify-start"
+        >
+          <Link
+            href={BOOK_HREF}
+            className="inline-flex min-h-11 items-center rounded-full bg-gold-bright px-6 text-base font-medium text-black transition-transform duration-300 hover:-translate-y-0.5 sm:text-lg"
+          >
+            Get My Book
+          </Link>
+          <Link
+            href="/store"
+            className="inline-flex min-h-11 items-center rounded-full border border-cream/60 px-6 text-base font-medium text-cream transition-colors hover:border-gold-bright hover:text-gold-bright sm:text-lg"
+          >
+            Read the first chapter
+          </Link>
+        </motion.div>
       </div>
 
       {/* Left rail: role above the line, start year below it. */}
@@ -183,22 +203,29 @@ export function Hero() {
             </motion.span>
           </AnimatePresence>
         </div>
-        <div className="absolute left-1/2 top-full -translate-x-1/2 pt-4 text-xs font-medium leading-none tracking-[0.05em] sm:text-base wide:pt-7 wide:text-[26px]">
-          <span className={`block ${vertical}`}>
-            <NeonYear year={role.year} />
-          </span>
-        </div>
+        {role.year !== null && (
+          <div className="absolute left-1/2 top-full -translate-x-1/2 pt-4 text-xs font-medium leading-none tracking-[0.05em] sm:text-base wide:pt-7 wide:text-[26px]">
+            <span className={`block ${vertical}`}>
+              <NeonYear year={role.year} />
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Scroll down */}
       {/* Mobile: the arrow floats just above the top of her head (her image is the bottom 60%, bun ≈ 49% down). */}
-      <div className="absolute bottom-[53%] left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 wide:bottom-[4%] wide:left-[14.2vw] wide:translate-x-0">
+      <button
+        type="button"
+        aria-label="Scroll down"
+        onClick={() => document.getElementById("hero")?.nextElementSibling?.scrollIntoView({ behavior: "smooth" })}
+        className="absolute bottom-[53%] left-1/2 z-30 flex min-h-11 -translate-x-1/2 items-center gap-3 wide:bottom-[4%] wide:left-[14.2vw] wide:translate-x-0"
+      >
         {/* Text hidden on mobile: just the arrow, centred. */}
         <span className="hidden text-xl font-medium tracking-[0.07em] wide:inline">Scroll down</span>
         {/* Mobile rests 5s between rounds; desktop keeps its 3s rest. */}
         <ScrollArrow rest={5} className="wide:hidden" />
         <ScrollArrow rest={3} className="hidden wide:block" />
-      </div>
+      </button>
     </section>
   );
 }

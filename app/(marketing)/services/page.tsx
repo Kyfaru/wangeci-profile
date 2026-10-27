@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 
 import { ContactForm } from "@/components/contact/ContactForm";
 import { BUSINESSES } from "@/lib/content/landing";
@@ -19,6 +20,16 @@ export default function ServicesPage() {
       <p className="mt-3 max-w-2xl text-lg text-navy/70">
         {SITE.isProduction ? "" : "TODO(client): the services she offers. "}These are the ventures {SITE.authorName} is building.
       </p>
+      <Link href="#contact" className="mt-6 inline-flex min-h-11 items-center rounded-[40px] bg-navy px-8 text-lg font-medium text-cream transition-colors hover:bg-gold">
+        Get in touch
+      </Link>
+
+      {!SITE.isProduction && (
+        <section aria-labelledby="services-list" className="mt-10 rounded-2xl border border-dashed border-gold p-6">
+          <h2 id="services-list" className="font-display text-2xl text-navy">What she offers</h2>
+          <p className="mt-2 text-navy/70">TODO(client): the list of services (name, one line each, how to book). Hidden in production until it is filled in.</p>
+        </section>
+      )}
 
       <ul className="mt-10 grid gap-8 md:grid-cols-3">
         {BUSINESSES.map((b) => (

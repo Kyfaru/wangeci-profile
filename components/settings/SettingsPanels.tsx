@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { updatePreferences } from "@/app/actions/settings";
 import { OtpInput } from "@/components/auth/OtpInput";
+import { StepUp } from "@/components/auth/StepUp";
 import { authClient } from "@/lib/auth-client";
 import { inputClass } from "@/lib/auth/client-actions";
 import { describeAuthError } from "@/lib/auth/flow";
@@ -35,6 +36,8 @@ export function SettingsPanels(props: Props) {
   const [setup, setSetup] = useState<{ qr: string; secret: string; backupCodes: string[] } | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  // Set when the server wants a fresh email code first; holds the action to retry once it is proven.
+  const [stepUp, setStepUp] = useState<"start" | "disable" | null>(null);
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
@@ -55,10 +58,12 @@ export function SettingsPanels(props: Props) {
   }
 
   async function startTwoFactor() {
+    setStepUp(null);
     setBusy(true);
     setMsg(null);
     const { data, error } = await authClient.twoFactor.enable({});
     setBusy(false);
+    if (error?.code === "STEP_UP_REQUIRED") return setStepUp("start");
     if (error || !data || !("totpURI" in data)) return setMsg(describeAuthError(error));
     const secret = new URL(data.totpURI).searchParams.get("secret") ?? "";
     setSetup({ qr: await QRCode.toDataURL(data.totpURI, { margin: 1, width: 200 }), secret, backupCodes: data.backupCodes });
@@ -83,6 +88,7 @@ export function SettingsPanels(props: Props) {
     setBusy(true);
     const { error } = await authClient.twoFactor.disable({});
     setBusy(false);
+    if (error?.code === "STEP_UP_REQUIRED") return setStepUp("disable");
     if (error) return setMsg(describeAuthError(error));
     setTfEnabled(false);
     setMsg("Two-step check is off.");
@@ -140,6 +146,17 @@ export function SettingsPanels(props: Props) {
       <section className={card} aria-labelledby="s-2fa">
         <h2 id="s-2fa" className="font-display text-2xl text-black">Two-step check (authenticator app)</h2>
         <p className="mt-2 text-sm text-black/60">An extra step when you sign in: a 6-digit code from an app such as Google Authenticator. Required for admin accounts.</p>
+        {stepUp && (
+          <div className="mt-4">
+            <StepUp
+              onDone={() => {
+                const again = stepUp;
+                setStepUp(null);
+                void (again === "start" ? startTwoFactor() : disableTwoFactor());
+              }}
+            />
+          </div>
+        )}
         {setup ? (
           <div className="mt-4">
             <p className="text-black">1. Scan this with your authenticator app (or type the key).</p>

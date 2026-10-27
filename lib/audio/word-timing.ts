@@ -5,6 +5,8 @@
  * It tracks the narration closely enough to follow along; exact timings (from an alignment tool or
  * the narrator) can replace this later without changing the player.
  */
+import { splitParagraphs } from "@/lib/reading/text";
+
 export interface TimedWord {
   text: string;
   /** Global word index within the chapter. */
@@ -20,9 +22,7 @@ const weightOf = (word: string, endsParagraph: boolean) => {
   return base + pause + (endsParagraph ? 6 : 0);
 };
 
-export function splitParagraphs(text: string): string[] {
-  return text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-}
+export { splitParagraphs };
 
 /** The words of a text, and for each word the FRACTION (0 to 1) of the chapter at which it has been spoken. */
 export function buildTiming(text: string): { words: TimedWord[]; ends: number[] } {

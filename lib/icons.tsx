@@ -2,18 +2,15 @@ import { Icon, type IconProps } from "@iconify/react";
 
 /**
  * Icon name restricted to the icon sets installed in this project
- * (@iconify-json/lucide, /tabler, /solar, /logos, /ic) — prevents typos
+ * (@iconify-json/lucide, /tabler, /logos) — prevents typos
  * from silently resolving to a missing icon at runtime, since Iconify
  * accepts any string but only these prefixes have local icon data bundled.
- * `logos`/`ic` were added for the login page's brand-colored OAuth glyphs
- * (`logos:google-icon`, `logos:facebook`, `ic:baseline-apple`).
+ * `logos` is for brand-colored glyphs (`logos:google-icon`).
  */
 export type AppIconName =
   | `lucide:${string}`
   | `tabler:${string}`
-  | `solar:${string}`
-  | `logos:${string}`
-  | `ic:${string}`;
+  | `logos:${string}`;
 
 export type AppIconProps = Omit<IconProps, "icon" | "width" | "height"> & {
   icon: AppIconName;

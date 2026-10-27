@@ -16,19 +16,24 @@ describe("coupons", () => {
     expect(checkCoupon(rule({ value: 250 }), 2000, NOW)).toEqual({ ok: true, discount: 2000 }); // percent capped at 100
   });
 
-  it("rounds to the cent without float errors", () => {
-    expect(checkCoupon(rule({ value: 33.33 }), 99.99, NOW)).toEqual({ ok: true, discount: 33.33 });
-    expect(checkCoupon(rule({ value: 10 }), 0.07, NOW)).toEqual({ ok: true, discount: 0.01 });
+  it("discounts are whole shillings (M-Pesa cannot collect cents), without float errors", () => {
+    expect(checkCoupon(rule({ value: 33.33 }), 99.99, NOW)).toEqual({ ok: true, discount: 33 });
+    expect(checkCoupon(rule({ value: 15 }), 999, NOW)).toEqual({ ok: true, discount: 150 }); // 149.85 rounds up
+    expect(checkCoupon(rule({ type: "FIXED", value: 10.4 }), 500, NOW)).toEqual({ ok: true, discount: 10 });
+    expect(Number.isInteger(totals({ subtotal: 999, discount: 150, feePercent: 2.5 }).total)).toBe(true);
   });
 
-  it("refuses unknown, inactive, early, expired, used-up and too-small-basket codes", () => {
-    expect(checkCoupon(null, 1000, NOW)).toMatchObject({ ok: false });
-    expect(checkCoupon(rule({ isActive: false }), 1000, NOW)).toMatchObject({ ok: false, reason: "That code is not valid." });
-    expect(checkCoupon(rule({ startsAt: new Date("2026-11-01") }), 1000, NOW)).toMatchObject({ ok: false, reason: "That code is not active yet." });
-    expect(checkCoupon(rule({ endsAt: new Date("2026-10-01") }), 1000, NOW)).toMatchObject({ ok: false, reason: "That code has expired." });
-    expect(checkCoupon(rule({ maxRedemptions: 5, used: 5 }), 1000, NOW)).toMatchObject({ ok: false, reason: "That code has been fully used." });
+  it("refuses unknown, inactive, early, expired, used-up and too-small-basket codes with ONE message", () => {
+    const refusals = [
+      checkCoupon(null, 1000, NOW),
+      checkCoupon(rule({ isActive: false }), 1000, NOW),
+      checkCoupon(rule({ startsAt: new Date("2026-11-01") }), 1000, NOW),
+      checkCoupon(rule({ endsAt: new Date("2026-10-01") }), 1000, NOW),
+      checkCoupon(rule({ maxRedemptions: 5, used: 5 }), 1000, NOW),
+      checkCoupon(rule({ minSubtotal: 1500 }), 1000, NOW),
+    ];
+    for (const r of refusals) expect(r).toEqual({ ok: false, reason: "That code is not valid." }); // no case can be told apart
     expect(checkCoupon(rule({ maxRedemptions: 5, used: 4 }), 1000, NOW)).toMatchObject({ ok: true });
-    expect(checkCoupon(rule({ minSubtotal: 1500 }), 1000, NOW)).toMatchObject({ ok: false });
   });
 });
 
@@ -44,6 +49,16 @@ describe("totals", () => {
 
   it("a discount larger than the subtotal is clamped", () => {
     expect(totals({ subtotal: 100, discount: 999, feePercent: 0 }).total).toBe(0);
+  });
+
+  it("the fee is a whole number of shillings", () => {
+    expect(feeFor(999, 2.5)).toBe(25); // 24.975
+    expect(totals({ subtotal: 999, discount: 0, feePercent: 2.5 }).total).toBe(1024);
+  });
+
+  it("the fee is a whole number of shillings", () => {
+    expect(feeFor(999, 2.5)).toBe(25); // 24.975
+    expect(totals({ subtotal: 999, discount: 0, feePercent: 2.5 }).total).toBe(1024);
   });
 
   it("no fee for a zero or negative percentage", () => {

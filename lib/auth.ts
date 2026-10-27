@@ -1,4 +1,8 @@
 import { betterAuth } from "better-auth";
+import { createElement } from "react";
+import AdminAlertEmail from "@/emails/admin-alert-email";
+import { sendEmail } from "@/lib/email";
+import { logError, traced } from "@/lib/trace";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
@@ -8,13 +12,25 @@ import { adminAc, defaultStatements } from "better-auth/plugins/admin/access";
 
 import { checkoutClaim } from "@/lib/auth/checkout-claim-plugin";
 import { OTP_ATTEMPTS_PER_CODE, OTP_LENGTH, OTP_TTL_SECONDS } from "@/lib/auth/constants";
+import {
+  clearTotpFailures,
+  countSmsToday,
+  hasFreshStepUp,
+  isSmsCountryAllowed,
+  markStepUp,
+  markUnproven,
+  recordTotpFailure,
+  settleFirstProof,
+  STEP_UP_ACCOUNT_MS,
+  totpLockedFor,
+} from "@/lib/auth/guards";
 import { createLadder } from "@/lib/auth/otp-ladder";
 import { decideNewSession, revokeOtherSessions } from "@/lib/auth/session-policy";
 import { env } from "@/lib/env";
 import { isE164 } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { dispatchOtp } from "@/lib/queue";
-import { rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { logActivity } from "@/lib/server/activity";
 
 // Origins that may call the auth endpoints: the app's own base URL, any extra domains from
@@ -31,6 +47,12 @@ const SEND_PATHS = ["/email-otp/send-verification-otp", "/phone-number/send-otp"
 const VERIFY_PATHS = ["/sign-in/email-otp", "/email-otp/verify-email", "/phone-number/verify"];
 const CAPTCHA_PATHS = SEND_PATHS;
 const TWO_FACTOR_VERIFY_PATHS = ["/two-factor/verify-totp", "/two-factor/verify-backup-code", "/two-factor/verify-otp"];
+// Changing two-step settings, or reading its secrets, needs an email code entered in the last 5 minutes.
+const TWO_FACTOR_SETTINGS_PATHS = ["/two-factor/enable", "/two-factor/disable", "/two-factor/generate-backup-codes", "/two-factor/get-totp-uri"];
+// Roles for which two-step is mandatory: they can never switch it off.
+const TWO_FACTOR_MANDATORY_ROLES = ["owner", "support", "editor"];
+// Paths where a correct email code proves the person holds the mailbox right now.
+const EMAIL_PROOF_PATHS = ["/sign-in/email-otp", "/email-otp/verify-email"];
 
 const ladder = createLadder();
 
@@ -54,7 +76,7 @@ function identifierFrom(body: unknown): string | null {
   return null;
 }
 
-const clientIp = (headers: Headers | undefined) => headers?.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+const ipOf = (headers: Headers | undefined) => (headers ? clientIp(headers) : "unknown");
 
 function readCookie(headers: Headers | undefined, name: string): string | null {
   const raw = headers?.get("cookie");
@@ -74,6 +96,23 @@ async function bootstrapOwner(user: { id: string; email: string }) {
   if (owner) return;
   await prisma.user.update({ where: { id: user.id }, data: { role: "owner" } });
   await logActivity({ userId: user.id, type: "owner.bootstrapped" });
+}
+
+/** An admin signing in from a device never seen for them gets an email (someone else may be using their code). Never blocks sign-in. */
+async function alertNewAdminDevice(userId: string, deviceId: string) {
+  await traced("auth.new-admin-device", async () => {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, role: true } });
+    if (!user || !user.role || user.role === "reader") return;
+    if (await prisma.userDevice.findUnique({ where: { userId_deviceId: { userId, deviceId } }, select: { id: true } })) return;
+    await sendEmail({
+      to: user.email,
+      userId,
+      purpose: "admin_new_device",
+      subject: "New device signed in to the Wangeci admin",
+      react: createElement(AdminAlertEmail, { title: "New device signed in", body: "Your admin account was just signed in from a device we have not seen before. If this was not you, ask the owner to change your role or ban the account." }),
+    });
+    await logActivity({ userId, type: "admin.new_device" });
+  });
 }
 
 /**
@@ -103,6 +142,11 @@ export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   trustedOrigins: TRUSTED_ORIGINS,
 
+  // Address recorded on sessions and used by Better Auth's own limiter. Vercel sets the first header itself
+  // and strips client copies; the others are only the fallback elsewhere. Every limit WE enforce uses
+  // clientIp() (right-most trusted hop), which does not depend on this list.
+  advanced: { ipAddress: { ipAddressHeaders: ["x-vercel-forwarded-for", "x-real-ip", "x-forwarded-for"] } },
+
   socialProviders:
     env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
       ? { google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } }
@@ -115,11 +159,35 @@ export const auth = betterAuth({
         throw new APIError("FORBIDDEN", { code: "IMPERSONATION_DISABLED", message: "Impersonation is disabled." });
       }
 
+      if (TWO_FACTOR_SETTINGS_PATHS.includes(ctx.path)) {
+        const current = await getSessionFromCtx(ctx).catch(() => null);
+        if (!current) throw new APIError("UNAUTHORIZED", { code: "AUTH_SESSION_REQUIRED", message: "Please sign in first." });
+        if (ctx.path === "/two-factor/disable" && TWO_FACTOR_MANDATORY_ROLES.includes(current.user.role ?? "")) {
+          throw new APIError("FORBIDDEN", { code: "AUTH_TWO_FACTOR_REQUIRED_FOR_ROLE", message: "Two-step sign-in cannot be switched off for staff accounts." });
+        }
+        if (!(await hasFreshStepUp(current.user.id, STEP_UP_ACCOUNT_MS))) {
+          throw new APIError("FORBIDDEN", { code: "STEP_UP_REQUIRED", message: "Please confirm with a fresh email code first." });
+        }
+        return;
+      }
+
+      if (TWO_FACTOR_VERIFY_PATHS.includes(ctx.path)) {
+        const current = await getSessionFromCtx(ctx).catch(() => null);
+        const wait = current ? await totpLockedFor(current.user.id) : 0;
+        if (wait > 0) {
+          throw new APIError("TOO_MANY_REQUESTS", { code: "AUTH_TWO_FACTOR_LOCKED", message: `Too many wrong codes. Try again in ${Math.ceil(wait / 60)} minutes.`, retryAfter: wait });
+        }
+        return;
+      }
+
       const isSend = SEND_PATHS.includes(ctx.path);
       if (!isSend && !VERIFY_PATHS.includes(ctx.path)) return;
 
       const id = identifierFrom(ctx.body);
       if (!id) return;
+
+      // A code check on an email whose account never proved its mailbox: remember it for the after hook.
+      if (EMAIL_PROOF_PATHS.includes(ctx.path)) await markUnproven(id);
 
       const wait = await ladder.retryAfter(id);
       if (wait > 0) {
@@ -127,13 +195,26 @@ export const auth = betterAuth({
       }
 
       if (isSend) {
-        const ip = clientIp(ctx.headers);
+        const ip = ipOf(ctx.headers);
         const [byId, byIp] = await Promise.all([
           rateLimit(`otp:send:id:${id}`, 5, "30 m"),
           rateLimit(`otp:send:ip:${ip}`, 20, "1 h"),
         ]);
         if (!byId.ok || !byIp.ok) {
           throw new APIError("TOO_MANY_REQUESTS", { code: "OTP_SEND_LIMIT", message: "Too many code requests. Please wait a little.", retryAfter: Math.max(byId.retryAfter, byIp.retryAfter) });
+        }
+
+        if (ctx.path === "/phone-number/send-otp") {
+          if (!isSmsCountryAllowed(id)) {
+            throw new APIError("BAD_REQUEST", { code: "SMS_COUNTRY_NOT_ALLOWED", message: "We cannot text that country yet. Please use your email." });
+          }
+          // Each text costs money, so a stranger may only trigger one for a phone that already has an account.
+          // The answer is the same either way, so this cannot be used to find out who is registered.
+          const signedIn = await getSessionFromCtx(ctx).catch(() => null);
+          if (!signedIn && !(await prisma.user.findUnique({ where: { phoneNumber: id }, select: { id: true } }))) {
+            return ctx.json({ message: "code sent" });
+          }
+          await countSmsToday();
         }
       }
     }),
@@ -142,13 +223,20 @@ export const auth = betterAuth({
     after: createAuthMiddleware(async (ctx) => {
       // A correct authenticator code (or backup code) marks THIS session as having passed the two-step check.
       if (TWO_FACTOR_VERIFY_PATHS.includes(ctx.path)) {
-        if (ctx.context.returned instanceof Error) return;
         const current = await getSessionFromCtx(ctx).catch(() => null);
-        if (current) {
-          // updateMany: when two-step was just switched on, the old session was replaced (and already marked), so there may be nothing to update.
-          await prisma.session.updateMany({ where: { id: current.session.id }, data: { twoFactorVerifiedAt: new Date() } });
-          await logActivity({ userId: current.user.id, type: "two_factor.verified" });
+        if (!current) return;
+        if (ctx.context.returned instanceof Error) {
+          // The 6-digit space is small: after a few wrong codes this session is thrown away and the step locks.
+          if (await recordTotpFailure(current.user.id)) {
+            await prisma.session.deleteMany({ where: { id: current.session.id } });
+            await logActivity({ userId: current.user.id, type: "two_factor.locked" });
+          }
+          return;
         }
+        await clearTotpFailures(current.user.id);
+        // updateMany: when two-step was just switched on, the old session was replaced (and already marked), so there may be nothing to update.
+        await prisma.session.updateMany({ where: { id: current.session.id }, data: { twoFactorVerifiedAt: new Date() } });
+        await logActivity({ userId: current.user.id, type: "two_factor.verified" });
         return;
       }
 
@@ -166,6 +254,13 @@ export const auth = betterAuth({
         }
       } else if (returned) {
         await ladder.clear(id);
+        if (EMAIL_PROOF_PATHS.includes(ctx.path)) {
+          // The mailbox was just proved: drop what a stranger attached to the account first, then
+          // record the proof so sensitive changes (two-step settings, refunds) can ask for it fresh.
+          await settleFirstProof(id);
+          const who = ctx.context.newSession?.user ?? (await getSessionFromCtx(ctx).catch(() => null))?.user;
+          if (who && who.email.toLowerCase() === id) await markStepUp(who.id);
+        }
       }
     }),
   },
@@ -187,11 +282,13 @@ export const auth = betterAuth({
           const sameSessionRenewal = Boolean(ctx?.path?.startsWith("/two-factor/"));
           if (user) {
             const decision = sameSessionRenewal ? "replace" : await decideNewSession(user);
-            if (decision === "block") {
+            if (typeof decision === "object") {
               await logActivity({ userId: user.id, type: "login.blocked", metadata: { reason: "session_already_active" } });
+              // The token proves this refusal followed a correct code; the client sends it back with the consent.
               throw new APIError("FORBIDDEN", {
                 code: "SESSION_ALREADY_ACTIVE",
                 message: "You are already signed in on another device.",
+                replaceToken: decision.block.replaceToken,
               });
             }
             if (decision === "replace") {
@@ -217,13 +314,14 @@ export const auth = betterAuth({
           await logActivity({ userId: session.userId, type: "login" });
           const deviceId = (session as { deviceId?: string | null }).deviceId;
           if (deviceId) {
+            await alertNewAdminDevice(session.userId, deviceId);
             await prisma.userDevice
               .upsert({
                 where: { userId_deviceId: { userId: session.userId, deviceId } },
                 create: { userId: session.userId, deviceId, label: (session.userAgent ?? "").slice(0, 120) || null },
                 update: { lastSeenAt: new Date() },
               })
-              .catch((error) => console.error("[auth] device upsert failed", error));
+              .catch((error) => logError("auth.device-upsert", error, { userId: session.userId }));
           }
         },
       },

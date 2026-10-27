@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { TimeRangeControl } from "@/components/admin/TimeRangeControl";
 import { getAttention, getOverview } from "@/lib/admin/stats";
+import { overview } from "@/lib/analytics";
 import { parseTimeRange } from "@/lib/admin/time-range";
 import { can } from "@/lib/permissions";
 import { requireRole } from "@/lib/server/session";
@@ -25,7 +26,7 @@ export default async function AdminOverviewPage({ searchParams }: PageProps<"/ad
   const sp = await searchParams;
   const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const range = parseTimeRange({ range: pick(sp.range), from: pick(sp.from), to: pick(sp.to) });
-  const [o, attention] = await Promise.all([getOverview(range), getAttention(user.id)]);
+  const [o, attention, web] = await Promise.all([getOverview(range), getAttention(user.id), overview(range)]);
   const maxRevenue = Math.max(1, ...o.series.map((s) => s.revenue));
 
   return (
@@ -76,6 +77,51 @@ export default async function AdminOverviewPage({ searchParams }: PageProps<"/ad
           <p className="mt-1 text-xs text-black/50">People whose reading or listening place was saved in this period.</p>
         </div>
       </dl>
+
+      {web && (web.online !== undefined || web.pages || web.clicks || web.traffic) && (
+        <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {web.online !== undefined && (
+            <div className={card}>
+              <dt className="text-sm text-black/60">Visitors online now</dt>
+              <dd className="mt-1 font-display text-3xl text-navy">{web.online}</dd>
+            </div>
+          )}
+          {web.pages && (
+            <div className={card}>
+              <dt className="text-sm text-black/60">Top pages</dt>
+              <dd className="mt-2 space-y-1 text-sm">
+                {web.pages.length === 0 ? <span className="text-black/50">No visits yet.</span> : web.pages.map((p) => (
+                  <div key={p.path} className="flex justify-between gap-2"><span className="truncate">{p.path}</span><span className="tabular-nums">{p.views}</span></div>
+                ))}
+              </dd>
+            </div>
+          )}
+          {web.clicks && (
+            <div className={card}>
+              <dt className="text-sm text-black/60">Clicks (buy, cart, sign-in)</dt>
+              <dd className="mt-2 space-y-1 text-sm">
+                {web.clicks.length === 0 ? <span className="text-black/50">None yet.</span> : web.clicks.map((c) => (
+                  <div key={c.name} className="flex justify-between gap-2"><span className="truncate">{c.name}</span><span className="tabular-nums">{c.count}</span></div>
+                ))}
+              </dd>
+            </div>
+          )}
+          {web.traffic && (
+            <div className={card}>
+              <dt className="text-sm text-black/60">Traffic</dt>
+              <dd className="mt-1 font-display text-3xl text-navy">{web.traffic.visitors}</dd>
+              <p className="mt-1 text-xs text-black/50">visitors, {web.traffic.pageviews} page views</p>
+              {web.bars && web.bars.length > 0 && (
+                <div className="mt-3 flex h-10 items-end gap-px" aria-hidden>
+                  {web.bars.map((b) => (
+                    <span key={b.t} className="flex-1 rounded-sm bg-gold-bright" style={{ height: `${Math.max(6, (b.views / Math.max(1, ...web.bars!.map((x) => x.views))) * 100)}%` }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </dl>
+      )}
 
       <section className={card} aria-labelledby="ov-series">
         <h2 id="ov-series" className="font-display text-xl text-black">Revenue by {o.unit}</h2>

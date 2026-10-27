@@ -1,4 +1,5 @@
 import { Client } from "@upstash/qstash";
+import { logError } from "@/lib/trace";
 import { createElement } from "react";
 
 import OtpEmail from "@/emails/otp-email";
@@ -33,7 +34,7 @@ export async function deliverOtp({ channel, to, code }: OtpJob): Promise<void> {
  */
 export async function dispatchOtp(job: OtpJob): Promise<void> {
   if (!env.QSTASH_TOKEN) {
-    await deliverOtp(job).catch((error) => console.error("[otp] direct send failed", error));
+    await deliverOtp(job).catch((error) => logError("otp.direct-send", error, { channel: job.channel }));
     return;
   }
   const client = new Client({ token: env.QSTASH_TOKEN });

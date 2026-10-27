@@ -16,43 +16,42 @@
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "db:seed": "node --env-file=.env.local --env-file=.env.development.local prisma/seed.ts",
     "db:dev": "node scripts/dev-db.mjs",
-    "db:migrate": "prisma migrate deploy"
+    "db:migrate": "prisma migrate deploy",
+    "e2e": "playwright test"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1119.0",
-    "@aws-sdk/s3-request-presigner": "^3.1119.0",
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@aws-sdk/s3-request-presigner": "^3.1146.0",
     "@iconify/react": "^6.0.2",
     "@paystack/inline-js": "^2.26.0",
     "@preline/pin-input": "^5.0.0",
     "@prisma/client": "^6.19.3",
     "@react-email/components": "^1.0.12",
     "@sentry/nextjs": "^10.71.0",
-    "@tanstack/react-query": "^5.102.6",
     "@upstash/qstash": "^2.12.0",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.39.0",
     "better-auth": "^1.7.2",
     "canvas-confetti": "^1.9.4",
-    "motion": "^13.4.2",
+    "motion": "^14.6.0",
     "next": "16.3.1",
     "pdf-lib": "^1.17.1",
     "preline": "^5.0.0",
     "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
-    "react": "19.2.8",
+    "react": "19.3.1",
     "react-dom": "19.2.8",
-    "resend": "^6.24.0",
+    "resend": "^6.34.1",
     "server-only": "^0.0.1",
-    "svix": "^2.1.0",
+    "svix": "^2.9.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@iconify-json/ic": "^1.2.4",
     "@iconify-json/logos": "^1.2.13",
-    "@iconify-json/lucide": "^1.2.126",
-    "@iconify-json/solar": "^1.2.9",
+    "@iconify-json/lucide": "^1.2.147",
     "@iconify-json/tabler": "^1.2.38",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/forms": "^0.5.11",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
@@ -65,7 +64,8 @@
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   },
   "packageManager": "pnpm@11.16.0"
 }
+

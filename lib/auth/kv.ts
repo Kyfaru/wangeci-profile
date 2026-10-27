@@ -1,5 +1,7 @@
 import { Redis } from "@upstash/redis";
 
+import { isRelaxed } from "@/lib/site";
+
 /**
  * Tiny key-value store with expiry, used by the OTP lockout ladder and the "replace other device"
  * consent. Upstash Redis in production; an in-memory Map for local development and tests.
@@ -52,7 +54,7 @@ export function getKv(): Kv {
     const url = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (url && token) globalForKv.__kv = redisKv(new Redis({ url, token }));
-    else if (process.env.NODE_ENV === "production") throw new Error("Upstash Redis is not configured");
+    else if (!isRelaxed()) throw new Error("Upstash Redis is not configured");
     else globalForKv.__kv = memoryKv();
   }
   return globalForKv.__kv;

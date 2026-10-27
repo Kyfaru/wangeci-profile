@@ -1,4 +1,5 @@
 import "server-only";
+import { logError } from "@/lib/trace";
 
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -19,7 +20,7 @@ async function touchLastSeen(userId: string) {
     await kv.set(key, 1, LAST_SEEN_EVERY_SECONDS);
     await prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() } });
   } catch (error) {
-    console.error("[session] lastSeenAt update failed", error);
+    logError("session.last-seen", error, { userId });
   }
 }
 
@@ -29,7 +30,7 @@ async function getRawSession() {
     const session = await auth.api.getSession({ headers: await headers() });
     return !session || session.user.banned ? null : session;
   } catch (error) {
-    console.error("[session] getSession failed", error);
+    logError("session.get", error);
     return null;
   }
 }

@@ -24,7 +24,13 @@ export default async function StorePage() {
       <p className="mt-3 text-lg text-navy/70">Books by {SITE.authorName}.</p>
 
       {books.length === 0 ? (
-        <p className="mt-10 text-xl text-navy/70">No books are available right now. Please check back soon.</p>
+        <section className="mt-10 rounded-[24px] bg-white p-8">
+          <h2 className="font-display text-2xl text-navy">New books are on the way</h2>
+          <p className="mt-2 text-lg text-navy/70">No books are available right now. Please check back soon, or get in touch and we will tell you when they are ready.</p>
+          <Link href="/contact" className="mt-6 inline-block rounded-[40px] bg-navy px-8 py-3 text-lg font-medium text-cream transition-colors hover:bg-gold">
+            Contact us
+          </Link>
+        </section>
       ) : (
         <ul className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {books.map((book) => {

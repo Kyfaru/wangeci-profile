@@ -26,6 +26,9 @@ export type Buyer = { userId: string; email: string; phone: string | null; accou
  *  - new email: a new account is created (unverified; the first code sign-in verifies it). The paying device
  *    can claim one session later, see claimSession.
  *  - the phone belongs to a DIFFERENT account: refused with a clear message instead of guessing.
+ * The guest-typed phone is NEVER stored on the new account: nobody has proven it, and user.phoneNumber is a
+ * sign-in factor, so storing it would let a stranger pre-register a victim's email with their own phone. The
+ * phone travels on the order (payerPhone) and only reaches the account through a verified phone code.
  * Concurrent first-time checkouts for one email are safe: the unique index decides, the loser re-reads.
  */
 export async function resolveBuyer(details: GuestDetails): Promise<Buyer> {
@@ -38,7 +41,7 @@ export async function resolveBuyer(details: GuestDetails): Promise<Buyer> {
 
   try {
     const user = await prisma.user.create({
-      data: { name: `${details.firstName.trim()} ${details.lastName.trim()}`.trim(), email, phoneNumber: details.phone, emailVerified: false, phoneNumberVerified: false },
+      data: { name: `${details.firstName.trim()} ${details.lastName.trim()}`.trim(), email, emailVerified: false, phoneNumberVerified: false },
       select: { id: true },
     });
     return { userId: user.id, email, phone: details.phone, accountCreated: true };
@@ -46,7 +49,6 @@ export async function resolveBuyer(details: GuestDetails): Promise<Buyer> {
     if ((error as { code?: string }).code === "P2002") {
       const again = await prisma.user.findUnique({ where: { email }, select: { id: true, phoneNumber: true } });
       if (again) return { userId: again.id, email, phone: again.phoneNumber, accountCreated: false };
-      throw new BuyerError("PHONE_TAKEN", "That phone number is already used by another account. Sign in with it, or use a different number.");
     }
     throw error;
   }

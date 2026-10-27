@@ -1,3 +1,5 @@
+import { AppError } from "@/lib/trace";
+
 /**
  * Payment provider contract. Callers (checkout, webhooks, the status check, refunds) only talk to this,
  * so another provider can be added without changing them.
@@ -41,6 +43,8 @@ export type ProviderEvent =
   | { type: "payment.failed"; provider: ProviderId; reference: string; reason?: string }
   | { type: "refund.processed"; provider: ProviderId; reference: string }
   | { type: "refund.failed"; provider: ProviderId; reference: string }
+  | { type: "dispute.opened"; provider: ProviderId; reference: string }
+  | { type: "dispute.resolved"; provider: ProviderId; reference: string; resolution?: string }
   | { type: "ignored" };
 
 export interface PaymentProvider {
@@ -57,9 +61,5 @@ export interface PaymentProvider {
   refund(input: { reference: string; amount: number; reason: string }): Promise<{ ok: boolean; manual?: boolean }>;
 }
 
-export class ProviderError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
-    super(message);
-    this.name = "ProviderError";
-  }
-}
+/** A provider failure as an AppError (502, so it is logged as an error and reaches Sentry). `PAYMENT_PROVIDER_REFUSED` means the provider answered "no"; the default means we do not know what happened. */
+export const providerError = (message: string, code = "PAYMENT_PROVIDER_UNAVAILABLE") => new AppError(code, message, 502);

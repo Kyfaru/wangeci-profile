@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { LegalPage } from "@/components/legal/LegalPage";
+import { LegalPage, Todo } from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = { title: "Privacy Policy", alternates: { canonical: "/privacy" } };
 
@@ -10,7 +10,7 @@ export default function PrivacyPage() {
     <LegalPage title="Privacy Policy" updated="6 October 2026 (draft)">
       <p>
         This explains what personal data this website collects, why, who helps us handle it, and how you can ask us to delete it. It is written to follow
-        the Kenya Data Protection Act, 2019. TODO(client): the legal name of the business that is the data controller, and its Data Protection Commissioner registration number.
+        the Kenya Data Protection Act, 2019. <Todo>TODO(client): the legal name of the business that is the data controller, and its Data Protection Commissioner registration number.</Todo>
       </p>
 
       <h2>What we collect</h2>
@@ -31,14 +31,18 @@ export default function PrivacyPage() {
         <li>Resend: email. Africa&apos;s Talking: text messages.</li>
         <li>Upstash: sign-in code delivery queue and rate limiting.</li>
         <li>Sentry: error monitoring.</li>
-        <li>Our web host (Vercel or our own server). A website analytics tool will be added later and this page will be updated before that happens.</li>
+        <li>Our web host (Vercel or our own server).</li>
+        <li>
+          If we switch them on: Umami (website analytics) and Chatwoot (chat widget). Cloudflare Turnstile checks forms for bots.
+          <Todo> TODO(lawyer): confirm what each of these collects and the wording here.</Todo>
+        </li>
       </ul>
       <p>Some of these companies store data outside Kenya. We choose providers that protect it, and we share only what each one needs.</p>
 
       <h2>How long we keep it</h2>
       <p>
         Account and order records are kept while your account exists and for as long as the law requires us to keep financial records. Security logs are kept for
-        12 months. Contact messages are removed from our admin inbox after 90 days. TODO(client): confirm these periods.
+        12 months. Contact messages are removed from our admin inbox after 90 days. <Todo>TODO(client): confirm these periods.</Todo>
       </p>
 
       <h2>Your rights, and asking us to delete your data</h2>

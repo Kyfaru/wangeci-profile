@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isRelaxed } from "@/lib/site";
+
 /**
  * Validates and parses all environment variables the app depends on.
  * Parsed once at import time so a missing or malformed var crashes boot
@@ -57,6 +59,8 @@ const envSchema = z.object({
   // Origins allowed to call the auth endpoints, besides BETTER_AUTH_URL.
   // Comma-separated (e.g. the staging domain). localhost is added only in development.
   TRUSTED_ORIGINS: z.string().optional(),
+  // How many reverse proxies in front of the app append to x-forwarded-for (see clientIp in lib/rate-limit.ts).
+  TRUSTED_PROXY_HOPS: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(1).max(5).optional()),
 
   // Upstash Redis (rate limits). Required in production, optional locally.
   UPSTASH_REDIS_REST_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
@@ -114,11 +118,30 @@ const envSchema = z.object({
     z.string().optional(),
   ),
 
+  // Umami analytics (hosted). Tracking needs UMAMI_WEBSITE_ID; the admin cards also need UMAMI_API_KEY.
+  UMAMI_WEBSITE_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  UMAMI_API_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  UMAMI_API_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().default("https://api.umami.is/v1")),
+  UMAMI_SCRIPT_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().default("https://cloud.umami.is/script.js")),
+
+  // Chatwoot live chat. The widget needs base URL + website token; the webhook also needs the secret.
+  CHATWOOT_BASE_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
+  CHATWOOT_WEBSITE_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  CHATWOOT_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
+  // Sanity blog (read-only). Absent PROJECT_ID means no /blog.
+  SANITY_PROJECT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  SANITY_DATASET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).default("production")),
+  SANITY_API_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  SANITY_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+
   // Comma-separated list of emails allowed into the admin panel
   ADMIN_EMAIL_ALLOWLIST: z.string().min(1),
 }).superRefine((value, ctx) => {
-  // Fail fast at boot in production rather than on the first request that needs the value.
-  if (value.NODE_ENV !== "production") return;
+  // Fail fast at boot on the REAL production site rather than on the first request that needs the value.
+  // Staging (Vercel) also runs with NODE_ENV=production, so it must say NEXT_PUBLIC_SITE_ENV=staging to boot without
+  // the launch-only services (Upstash, QStash, Daraja, Turnstile...). An unset value is treated as the real site.
+  if (isRelaxed(value.NODE_ENV)) return;
   for (const key of [
     "UPSTASH_REDIS_REST_URL",
     "UPSTASH_REDIS_REST_TOKEN",
@@ -136,6 +159,10 @@ const envSchema = z.object({
   ] as const) {
     if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required in production` });
   }
+  // Test or sandbox keys on the real site would take "payments" that never move money (and grant nothing real).
+  if (!value.PAYSTACK_SECRET_KEY.startsWith("sk_live_")) ctx.addIssue({ code: "custom", path: ["PAYSTACK_SECRET_KEY"], message: "PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production" });
+  if (!value.PAYSTACK_PUBLIC_KEY.startsWith("pk_live_")) ctx.addIssue({ code: "custom", path: ["PAYSTACK_PUBLIC_KEY"], message: "PAYSTACK_PUBLIC_KEY must be a live key (pk_live_...) in production" });
+  if (value.DARAJA_ENV !== "production") ctx.addIssue({ code: "custom", path: ["DARAJA_ENV"], message: "DARAJA_ENV must be production in production" });
 });
 
 // Parsed on first import. `instrumentation.ts` imports this at server start in

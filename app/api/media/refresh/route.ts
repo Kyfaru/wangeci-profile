@@ -4,6 +4,7 @@ import { z } from "zod";
 import { grantChapterAudio } from "@/lib/media";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/server/session";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ const bodySchema = z.object({ editionId: z.string().min(1).max(64), chapterIdx: 
  * about 80% of the old URL's life and swaps the source without remounting the audio element. The
  * entitlement is checked again every time, so a refund stops new links immediately.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
@@ -25,3 +26,5 @@ export async function POST(request: Request) {
   if (!grant) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(grant, { headers: { "Cache-Control": "no-store" } });
 }
+
+export const POST = api("media.refresh.post", handlePOST);

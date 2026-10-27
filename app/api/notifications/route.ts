@@ -3,11 +3,12 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/server/session";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/notifications : the person's own in-app (bell) items, newest first. */
-export async function GET() {
+async function handleGET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const items = await prisma.notificationLog.findMany({
@@ -22,7 +23,7 @@ export async function GET() {
 const readSchema = z.object({ ids: z.array(z.string().min(1).max(64)).max(100).optional() });
 
 /** POST /api/notifications : mark some (ids) or all of your own items as read. */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = readSchema.safeParse(await request.json().catch(() => ({})));
@@ -34,3 +35,6 @@ export async function POST(request: Request) {
   });
   return NextResponse.json({ updated: count });
 }
+
+export const GET = api("notifications.get", handleGET);
+export const POST = api("notifications.post", handlePOST);

@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { LegalPage } from "@/components/legal/LegalPage";
+import { LegalPage, Todo } from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = { title: "Terms & Conditions", alternates: { canonical: "/terms" } };
 
 export default function TermsPage() {
   return (
     <LegalPage title="Terms & Conditions" updated="6 October 2026 (draft)">
-      <p>These terms apply when you use this website, create an account or buy a digital book. By creating an account you agree to them. TODO(client): the legal name of the seller.</p>
+      <p>These terms apply when you use this website, create an account or buy a digital book. By creating an account you agree to them. <Todo>TODO(client): the legal name of the seller.</Todo></p>
 
       <h2>Your account</h2>
       <p>

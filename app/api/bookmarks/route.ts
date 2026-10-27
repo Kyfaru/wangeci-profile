@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/server/session";
+import { api } from "@/lib/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ const owns = async (userId: string, editionId: string) =>
   Boolean(await prisma.entitlement.findUnique({ where: { userId_editionId: { userId, editionId } }, select: { id: true } }));
 
 /** GET /api/bookmarks?editionId= : the signed-in person's own bookmarks. */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const editionId = request.nextUrl.searchParams.get("editionId") ?? undefined;
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
 }
 
 /** POST /api/bookmarks : add one (idempotent for the same spot). */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
 }
 
 /** DELETE /api/bookmarks?id= : remove one of your own. */
-export async function DELETE(request: NextRequest) {
+async function handleDELETE(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const id = request.nextUrl.searchParams.get("id");
@@ -62,3 +63,7 @@ export async function DELETE(request: NextRequest) {
   const { count } = await prisma.bookmark.deleteMany({ where: { id, userId: session.user.id } }); // userId in the filter: never someone else's
   return count > 0 ? new NextResponse(null, { status: 204 }) : NextResponse.json({ error: "Not found" }, { status: 404 });
 }
+
+export const GET = api("bookmarks.get", handleGET);
+export const POST = api("bookmarks.post", handlePOST);
+export const DELETE = api("bookmarks.delete", handleDELETE);
