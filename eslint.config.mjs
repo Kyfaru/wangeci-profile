@@ -6,7 +6,7 @@ const ADMIN = {
   group: ["@/lib/admin", "@/lib/admin/*", "@/components/admin", "@/components/admin/*"],
   message: "Admin-only code. Import it only from app/admin, app/api/admin, components/admin or lib/admin.",
 };
-const ADMIN_PLACES = ["app/admin/**", "app/api/admin/**", "components/admin/**", "lib/admin/**"];
+const ADMIN_PLACES = ["app/admin/**", "app/api/admin/**", "components/admin/**", "lib/admin/**", "lib/inputs/actions.test.ts"]; // the input sweep deliberately calls admin actions
 
 const eslintConfig = defineConfig([
   ...nextVitals,
