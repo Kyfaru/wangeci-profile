@@ -12,7 +12,7 @@ let resend: Resend | undefined;
 // No RESEND_FROM_EMAIL env var exists yet (lib/env.ts is owned by the
 // foundation agent) — hardcoded here as a placeholder until a real sending
 // domain is verified with Resend and a proper env var is added.
-const DEFAULT_FROM_EMAIL = "Wangeci <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "Wangeci <onboarding@mail.fechiorganics.shop>";
 
 export interface SendEmailParams {
   to: string;
