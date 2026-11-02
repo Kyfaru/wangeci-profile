@@ -29,7 +29,7 @@ Two-step bypass through code and Google sign-in (found by testing the real flow,
 3. Open an order, try Refund (it will say the provider refused until real Paystack keys are in place) and look at `/admin/audit`.
 
 ## IMPORTANT: `.env.local` now points at Neon
-During this phase `.env.local` was changed (10:04) to a Neon database. That Neon database has NO tables yet (I confirmed `public.two_factor` is missing) and I did NOT migrate it. To protect it, I added `.env.development.local` (git-ignored) that keeps `pnpm dev`, the seed script and all my tests on the local throwaway Postgres. When you want Neon used for real: run `prisma migrate resolve --applied 20261006000000_baseline` only if it was created earlier by another route, otherwise `prisma migrate deploy` (all migrations) with `DATABASE_URL` and `DIRECT_URL` set; tell me and I will do it with you.
+During this phase `.env.local` was changed (10:04) to a Neon database. That Neon database has NO tables yet (I confirmed `public.two_factor` is missing) and I did NOT migrate it. To protect it, I added `.env.development.local` (git-ignored) that keeps `pnpm dev`, the seed script and all my tests on the local throwaway Postgres. When you want Neon used for real: run `prisma migrate resolve --applied 20261006000000_baseline` only if it was created earlier by another route, otherwise `prisma migrate deploy` (all migrations) with `DATABASE_URL` set; tell me and I will do it with you.
 
 ## Not done or unverified
 - Customers screen "ban" and role forms are built and tested at function level; I did not click them in a browser. Editions upload page is replaced by the publish script (agreed cut).

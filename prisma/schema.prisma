@@ -96,12 +96,6 @@ model Account {
   id                    String    @id @default(cuid())
   accountId             String
   providerId            String
-  // The stable provider-side namespace Better Auth uses (with accountId) to
-  // recognize an account — required by the installed better-auth version's
-  // core Account schema (see @better-auth/core/db/schema/account.ts). Not to
-  // be confused with providerId; Better Auth writes a synthetic value here
-  // (e.g. "local:oauth:<providerId>") for providers without their own issuer.
-  issuer                String
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -117,9 +111,6 @@ model Account {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Better Auth's own account-linking uniqueness guarantee: one row per
-  // (issuer, accountId) pair.
-  @@unique([issuer, accountId])
   @@index([userId])
   @@map("account")
 }

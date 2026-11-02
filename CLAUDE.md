@@ -7,7 +7,7 @@ Source of truth for scope: `docs/BUILD_BRIEF.md` (original) overridden by `docs/
 ## Commands (pnpm 11)
 - `pnpm dev` (user may already own :3000; never run `pnpm build` or delete `.next` while it is up)
 - `pnpm typecheck` (runs `next typegen` first), `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm check` (typecheck + lint + test)
-- Prisma: `prisma validate` needs DATABASE_URL and DIRECT_URL set (CI uses placeholders). Never run migrations against staging/production without asking.
+- Prisma: `prisma validate` needs DATABASE_URL set (CI uses placeholders). Never run migrations against staging/production without asking.
 
 ## Conventions
 - Server decides money and access. Prices come from the database. Only a verified server-to-server event marks an order PAID/REFUNDED.

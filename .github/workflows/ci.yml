@@ -21,7 +21,6 @@ jobs:
     env:
       # Placeholder values only so `prisma validate` can read the schema. No real secrets in CI.
       DATABASE_URL: postgresql://user:pass@localhost:5432/ci
-      DIRECT_URL: postgresql://user:pass@localhost:5432/ci
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6 # version comes from "packageManager" in package.json

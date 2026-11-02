@@ -16,7 +16,6 @@ const envSchema = z.object({
   // Postgres (Neon) — DATABASE_URL is the pooled connection used at
   // runtime, DIRECT_URL bypasses the pooler for migrations.
   DATABASE_URL: z.string().url(),
-  DIRECT_URL: z.string().url(),
 
   // Better Auth
   BETTER_AUTH_SECRET: z
