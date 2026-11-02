@@ -6,7 +6,8 @@ import { Resend } from "resend";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
-const resend = new Resend(env.RESEND_API_KEY);
+// Built on first send: resend 6.34+ throws on an empty key, and `next build` runs with no secrets.
+let resend: Resend | undefined;
 
 // No RESEND_FROM_EMAIL env var exists yet (lib/env.ts is owned by the
 // foundation agent) — hardcoded here as a placeholder until a real sending
@@ -71,7 +72,7 @@ export async function sendEmail({
     },
   });
 
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await (resend ??= new Resend(env.RESEND_API_KEY)).emails.send({
     from: from ?? DEFAULT_FROM_EMAIL,
     to,
     subject,

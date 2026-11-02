@@ -58,7 +58,7 @@ async function handlePOST(request: Request) {
       "svix-id": svixId,
       "svix-timestamp": svixTimestamp,
       "svix-signature": svixSignature,
-    }) as ResendWebhookPayload;
+    }) as unknown as ResendWebhookPayload;
   } catch (error) {
     // Anything but a verification failure is a bug in verify itself: let it surface as a 500, not a 401.
     if (!(error instanceof WebhookVerificationError)) throw error;

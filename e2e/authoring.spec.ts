@@ -15,7 +15,7 @@ import { db, e2eEmail, uid } from "./db";
 const KNOWN_CODE = "4242"; // OTP_LENGTH in lib/auth/constants.ts is 4
 const hashed = (otp: string) => createHash("sha256").update(otp).digest("base64url");
 
-async function useKnownCode(type: "sign-in" | "email-verification", email: string) {
+async function fetchKnownCode(type: "sign-in" | "email-verification", email: string) {
   const identifier = `${type}-otp-${email}`;
   await expect
     .poll(async () => (await db().verification.updateMany({ where: { identifier }, data: { value: `${hashed(KNOWN_CODE)}:0` } })).count, { timeout: 60_000 })
@@ -51,7 +51,7 @@ async function signInByEmailCode(page: Page, email: string) {
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "Continue with email" }).click();
   await expect(page).toHaveURL(/\/verify/);
-  await useKnownCode("sign-in", email);
+  await fetchKnownCode("sign-in", email);
   await typeCode(page, KNOWN_CODE);
   await expect(page).not.toHaveURL(/\/verify/, { timeout: 60_000 });
 }
@@ -110,7 +110,7 @@ test.describe("book authoring", () => {
     }).toPass({ timeout: 90_000 });
     if (await confirm.isVisible()) {
       await confirm.click();
-      await useKnownCode("email-verification", ownerEmail);
+      await fetchKnownCode("email-verification", ownerEmail);
       await typeCode(page, KNOWN_CODE); // proving the mailbox retries the set-up automatically
     }
 
