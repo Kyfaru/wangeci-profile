@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 
 import { E164_REGEX } from "@/lib/phone";
 
+const atEnvironment = env.AT_ENV ?? (env.NODE_ENV === "production" ? "production" : "sandbox");
 const AT_BASE_URL =
-  env.NODE_ENV === "production"
+  atEnvironment === "production"
     ? "https://api.africastalking.com"
     : "https://api.sandbox.africastalking.com";
 

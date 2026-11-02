@@ -52,6 +52,9 @@ const envSchema = z.object({
   AT_USERNAME: z.string().min(1),
   AT_API_KEY: z.string().min(1),
   AT_SENDER_ID: z.string().max(11, "AT_SENDER_ID must be at most 11 characters"),
+  // Override the provider environment for production-built staging deployments.
+  // Defaults preserve the existing behavior: sandbox locally, live in production.
+  AT_ENV: z.enum(["sandbox", "production"]).optional(),
 
   // Audio is uploaded as finished files (no text-to-speech), so there is no ElevenLabs key.
 
